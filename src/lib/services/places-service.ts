@@ -34,7 +34,7 @@ export class PlacesService {
     postalCode?: string;
   } {
     try {
-      const parsed = parseAddress.parseLocation(formattedAddress);
+      const parsed = parseAddress(formattedAddress);
       return {
         city: parsed?.city || undefined,
         state: parsed?.state || undefined,

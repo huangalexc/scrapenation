@@ -274,7 +274,18 @@ export class JobOrchestratorService {
    */
   private async updateJobProgress(
     jobId: string,
-    updates: Partial<JobProgress>
+    updates: {
+      totalZips?: number;
+      zipsProcessed?: number;
+      businessesFound?: number;
+      businessesEnriched?: number;
+      businessesScraped?: number;
+      errorsEncountered?: number;
+      placesApiCalls?: number;
+      customSearchCalls?: number;
+      openaiCalls?: number;
+      estimatedCost?: number;
+    }
   ): Promise<void> {
     await prisma.job.update({
       where: { id: jobId },
