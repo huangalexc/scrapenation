@@ -1,0 +1,116 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Business model - stores all data from Google Places + enrichment
+model Business {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Google Places Nearby Search fields
+  placeId            String  @unique @map("place_id")
+  name               String
+  formattedAddress   String  @map("formatted_address")
+  latitude           Float
+  longitude          Float
+  rating             Float?
+  userRatingsTotal   Int?    @map("user_ratings_total")
+  priceLevel         Int?    @map("price_level")
+  types              String[] // Array of business types from Google
+  businessType       String  @map("business_type") // User-selected type
+
+  // Parsed address fields
+  city               String?
+  state              String?
+  postalCode         String? @map("postal_code")
+
+  // SERP enrichment fields (from Custom Search + GPT)
+  serpDomain           String? @map("serp_domain")
+  serpDomainConfidence Float?  @map("serp_domain_confidence")
+  serpEmail            String? @map("serp_email")
+  serpEmailConfidence  Float?  @map("serp_email_confidence")
+  serpPhone            String? @map("serp_phone")
+  serpPhoneConfidence  Float?  @map("serp_phone_confidence")
+
+  // Domain scraping fields
+  domainEmail        String? @map("domain_email")
+  domainPhone        String? @map("domain_phone")
+  scrapeError        String? @map("scrape_error") // Error code if scraping failed
+
+  // Relationship to job
+  jobId String? @map("job_id")
+  job   Job?    @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  // Indexes for filtering and sorting
+  @@index([state])
+  @@index([businessType])
+  @@index([rating])
+  @@index([serpDomainConfidence])
+  @@index([serpEmailConfidence])
+  @@index([serpPhoneConfidence])
+  @@index([serpEmail])
+  @@index([serpPhone])
+  @@index([domainEmail])
+  @@index([domainPhone])
+  @@index([jobId])
+  @@index([city, state])
+  @@map("businesses")
+}
+
+// Job model - tracks scraping jobs
+model Job {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Job configuration
+  businessType String   @map("business_type")
+  geography    String[] // Array of states, or ["nationwide"]
+  zipPercentage Int     @default(30) @map("zip_percentage") // Top N% of ZIPs to query
+
+  // Job status
+  status JobStatus @default(PENDING)
+
+  // Progress tracking
+  totalZips           Int @default(0) @map("total_zips")
+  zipsProcessed       Int @default(0) @map("zips_processed")
+  businessesFound     Int @default(0) @map("businesses_found")
+  businessesEnriched  Int @default(0) @map("businesses_enriched")
+  businessesScraped   Int @default(0) @map("businesses_scraped")
+  errorsEncountered   Int @default(0) @map("errors_encountered")
+
+  // Cost tracking
+  placesApiCalls      Int @default(0) @map("places_api_calls")
+  customSearchCalls   Int @default(0) @map("custom_search_calls")
+  openaiCalls         Int @default(0) @map("openai_calls")
+  estimatedCost       Float @default(0) @map("estimated_cost")
+
+  // Error logs
+  errorLog String? @map("error_log") @db.Text
+
+  // Relationships
+  businesses Business[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([businessType])
+  @@map("jobs")
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}

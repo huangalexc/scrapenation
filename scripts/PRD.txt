@@ -1,0 +1,255 @@
+# PRD — National Business Discovery & Enrichment Scraper
+
+
+## 1. Overview
+This system discovers businesses across the United States by querying high-population ZIP codes using Google Places Nearby Search, then enriches each business using Google Custom Search and GPT-4o-mini. The output includes business metadata, estimated website/domain, contact details, confidence scores, and final verified information extracted via domain scraping. Results are viewable in a simple UI and exportable to CSV.
+
+
+The purpose is to generate a scalable, low-cost lead enrichment pipeline optimized for nationwide data coverage while minimizing reliance on expensive Places Details calls.
+
+
+---
+
+
+## 2. Goals
+- Allow users to retrieve large sets of U.S. businesses for any chosen business type and geography.
+- Achieve accurate extraction of website, email, and phone number per business via a hybrid SERP + GPT approach.
+- Reduce cost per enriched email to ~2 cents.
+- Provide a dataset suitable for outbound lead generation or market analysis.
+- Build a UI that supports filtering, sorting, and exporting enriched data.
+
+
+---
+
+
+## 3. Inputs
+### Required inputs
+- **Business type** (free-text): e.g. “restaurant,” “electrician,” “clinic.”
+- **Geography**:
+- One or more states, or
+- “Nationwide.”
+
+
+### Provided data
+For every ZIP code in the U.S.:
+- Population
+- Population centroid (lat/lng)
+- Land area (km² or mi²)
+
+
+---
+
+
+## 4. High-Level Workflow
+1. Select relevant ZIP codes based on state selection and top N% by population.
+2. Query Places Nearby Search for each selected ZIP using a computed radius.
+3. Collect and dedupe all business results based on `place_id`.
+4. Enrich each business via Google Custom Search + GPT-4o-mini.
+5. Optionally scrape high-confidence domains for deeper enrichment.
+6. Present results in a UI with filtering and CSV export.
+
+
+---
+
+
+## 5. Detailed Functional Specification
+
+
+### 5.1 ZIP Code Selection
+- User selects target geography (states or nationwide).
+- System filters ZIP codes within that geography.
+- Sort ZIP codes by population descending.
+- Select the **top N%** (configurable, default e.g. top 30%).
+
+
+---
+
+
+### 5.2 Places Nearby Search Collection
+For each selected ZIP code:
+
+
+#### Search parameters
+- **Location**: ZIP population centroid (lat, lng)
+- **Radius**: `radius = sqrt(land_area/pi)`
+- **Keyword / business type**: user input
+- **Pagination**: retrieve up to the full 3 pages (max 60 places).
+
+
+#### Data to store for each place
+Store all fields made available by Nearby Search:
+- `place_id`
+- `name`
+- `formatted_address`
+- `geometry`
+- `rating`
+- `user_ratings_total`
+- `price_level`
+- `types`
+- Internal field: `business_type` = user input
+
+
+#### Address parsing
+- Using a standard address parsing library, extract:
+- City
+- State
+- Postal code (if available in formatted_address)
+
+
+#### Deduplication
+- After collecting all ZIP results, dedupe businesses by `place_id`.
+
+
+---
+
+
+### 5.3 SERP-Based Enrichment (Custom Search + GPT-4o-mini)
+
+
+#### Search query construction
+For each business:
+"<business_name> <city>, <state>"
+#### Google Custom Search request
+## 7. Front-End Requirements
+
+
+### Core UX
+A simple web UI with:
+- Search/filter bar
+- Filters:
+- State
+- Business type
+- Rating
+- Confidence thresholds
+- Has email / has phone
+- Sorting:
+- Domain confidence
+- Rating
+- Name
+- City
+
+
+### Data presentation
+- Paginated table of all businesses.
+- Columns include:
+- Name
+- City
+- State
+- Rating
+- serp_domain
+- serp_email
+- serp_email_confidence
+- domain_email
+- domain_phone
+
+
+### Export
+- CSV export of all filtered rows.
+
+
+---
+
+
+## 8. Performance & Cost Targets
+- Estimated cost ~2 cents per email (processing + scraping).
+- Custom Search reduces enrichment cost by ~60% compared to Places Details calls.
+- Full pipeline cost should remain linear with number of businesses processed.
+
+
+---
+
+
+## 9. Edge Cases & Error Handling
+- Businesses with ambiguous names (multiple SERP candidates).
+- ZIPs with low population → no Nearby Search results.
+- API quota exhaustion → graceful retry with exponential backoff.
+- Domain scraper blocked → mark with error code, but keep upstream SERP fields.
+
+
+---
+
+
+## 10. Future Enhancements (optional)
+- Caching SERP → domain mappings to avoid repeated GPT calls for chains/franchises.
+- Multi-keyword business type support (e.g., “roofing contractor”).
+- Automatic resume of interrupted scraping jobs.
+- Analytics on SERP confidence vs scrape accuracy.
+
+| `business_type` | string | User-selected type |
+| `serp_domain` | string | Domain extracted by GPT |
+| `serp_domain_confidence` | float | 0–100 |
+| `serp_email` | string | Extracted email |
+| `serp_email_confidence` | float | 0–100 |
+| `serp_phone` | string | Extracted phone |
+| `serp_phone_confidence` | float | 0–100 |
+| `domain_email` | string | Scraped email |
+| `domain_phone` | string | Scraped phone |
+
+
+---
+
+
+## 7. Front-End Requirements
+
+
+### Core UX
+A simple web UI with:
+- Search/filter bar
+- Filters:
+- State
+- Business type
+- Rating
+- Confidence thresholds
+- Has email / has phone
+- Sorting:
+- Domain confidence
+- Rating
+- Name
+- City
+
+
+### Data presentation
+- Paginated table of all businesses.
+- Columns include:
+- Name
+- City
+- State
+- Rating
+- serp_domain
+- serp_email
+- serp_email_confidence
+- domain_email
+- domain_phone
+
+
+### Export
+- CSV export of all filtered rows.
+
+
+---
+
+
+## 8. Performance & Cost Targets
+- Estimated cost ~2 cents per email (processing + scraping).
+- Custom Search reduces enrichment cost by ~60% compared to Places Details calls.
+- Full pipeline cost should remain linear with number of businesses processed.
+
+
+---
+
+
+## 9. Edge Cases & Error Handling
+- Businesses with ambiguous names (multiple SERP candidates).
+- ZIPs with low population → no Nearby Search results.
+- API quota exhaustion → graceful retry with exponential backoff.
+- Domain scraper blocked → mark with error code, but keep upstream SERP fields.
+
+
+---
+
+
+## 10. Future Enhancements (optional)
+- Caching SERP → domain mappings to avoid repeated GPT calls for chains/franchises.
+- Multi-keyword business type support (e.g., “roofing contractor”).
+- Automatic resume of interrupted scraping jobs.
+- Analytics on SERP confidence vs scrape accuracy.

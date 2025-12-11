@@ -1,0 +1,14 @@
+{
+  "name": "scrapenation-worker",
+  "version": "1.0.0",
+  "description": "Railway background worker for ScrapENation",
+  "main": "index.ts",
+  "scripts": {
+    "start": "tsx index.ts",
+    "dev": "tsx watch index.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.1.0",
+    "tsx": "^4.21.0"
+  }
+}
