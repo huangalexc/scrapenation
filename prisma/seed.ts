@@ -1,13 +1,36 @@
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('Starting seed...');
 
+  // Create a test user if it doesn't exist
+  let testUser = await prisma.user.findUnique({
+    where: { email: 'test@example.com' },
+  });
+
+  if (!testUser) {
+    const passwordHash = await bcrypt.hash('TestPass123', 10);
+    testUser = await prisma.user.create({
+      data: {
+        email: 'test@example.com',
+        passwordHash,
+        tier: 'FREE',
+        jobsCreated: 1,
+        emailVerified: new Date(),
+      },
+    });
+    console.log('Created test user:', testUser.id);
+  } else {
+    console.log('Test user already exists:', testUser.id);
+  }
+
   // Create a test job
   const testJob = await prisma.job.create({
     data: {
+      userId: testUser.id,
       businessType: 'restaurant',
       geography: ['CA', 'NY'],
       zipPercentage: 30,

@@ -1,0 +1,54 @@
+
+> scrap enation@0.1.0 build
+> prisma generate && next build
+
+warn The configuration property `package.json#prisma` is deprecated and will be removed in Prisma 7. Please migrate to a Prisma config file (e.g., `prisma.config.ts`).
+For more information, see: https://pris.ly/prisma-config
+
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v6.19.1) to ./node_modules/@prisma/client in 130ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate
+
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /Users/alexander/package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * /Users/alexander/code/scrapenation/package-lock.json
+   * /Users/alexander/code/package-lock.json
+
+   ▲ Next.js 16.0.8 (Turbopack)
+   - Environments: .env.local, .env
+
+ ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+   Creating an optimized production build ...
+
+> Build error occurred
+Error: Turbopack build failed with 1 errors:
+./code/scrapenation/node_modules/resend/dist/index.mjs:175:5
+Module not found: Can't resolve '@react-email/render'
+[0m [90m 173 |[39m [36mfunction[39m render(node) {
+ [90m 174 |[39m   [36mreturn[39m [36mnew[39m [33mPromise[39m((resolve[33m,[39m reject) [33m=>[39m {
+[31m[1m>[22m[39m[90m 175 |[39m     [36mimport[39m([32m"@react-email/render"[39m)[33m.[39mthen(({ render[33m:[39m render2 }) [33m=>[39m {
+ [90m     |[39m     [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 176 |[39m       resolve(render2(node))[33m;[39m
+ [90m 177 |[39m     })[33m.[39m[36mcatch[39m(() [33m=>[39m {
+ [90m 178 |[39m       reject([0m
+
+
+
+Import trace:
+  Server Component:
+    ./code/scrapenation/node_modules/resend/dist/index.mjs
+    ./code/scrapenation/src/lib/services/email-verification-service.ts
+    ./code/scrapenation/src/app/actions/auth-actions.ts
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)

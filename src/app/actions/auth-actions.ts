@@ -38,7 +38,7 @@ export type ActionResult<T = void> = {
  */
 export async function signupAction(
   formData: FormData
-): Promise<ActionResult> {
+): Promise<ActionResult<{ email: string }>> {
   try {
     const rawData = {
       email: formData.get('email'),
@@ -90,7 +90,7 @@ export async function signupAction(
     if (error instanceof z.ZodError) {
       return {
         success: false,
-        error: error.errors[0].message,
+        error: error.issues[0].message,
       };
     }
 
@@ -129,7 +129,7 @@ export async function loginAction(
     if (error instanceof z.ZodError) {
       return {
         success: false,
-        error: error.errors[0].message,
+        error: error.issues[0].message,
       };
     }
 
