@@ -21,6 +21,55 @@ export class DomainScraperService {
     /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
 
   /**
+   * Known business directories and third-party sites to skip
+   */
+  private readonly DIRECTORY_DOMAINS = [
+    'yelp.com',
+    'google.com',
+    'maps.google.com',
+    'facebook.com',
+    'instagram.com',
+    'twitter.com',
+    'linkedin.com',
+    'yellowpages.com',
+    'whitepages.com',
+    'mapquest.com',
+    'tripadvisor.com',
+    'foursquare.com',
+    'bbb.org',
+    'angieslist.com',
+    'thumbtack.com',
+    'homeadvisor.com',
+    'houzz.com',
+    'zillow.com',
+    'trulia.com',
+    'realtor.com',
+    'apartments.com',
+    'rentals.com',
+    'opentable.com',
+    'resy.com',
+    'seamless.com',
+    'grubhub.com',
+    'doordash.com',
+    'ubereats.com',
+    'postmates.com',
+    'wikipedia.org',
+    'nextdoor.com',
+    'merchantcircle.com',
+    'manta.com',
+    'superpages.com',
+    'local.com',
+    'citysearch.com',
+    'kudzu.com',
+    'porch.com',
+    'usnews.com',
+    'healthgrades.com',
+    'vitals.com',
+    'zocdoc.com',
+    'webmd.com',
+  ];
+
+  /**
    * Common contact page paths to check
    */
   private readonly CONTACT_PATHS = [
@@ -32,15 +81,48 @@ export class DomainScraperService {
   ];
 
   /**
+   * Track failed domains to avoid retrying other pages
+   */
+  private failedDomains = new Set<string>();
+
+  /**
+   * Check if domain is a known directory site
+   */
+  private isDirectorySite(domain: string): boolean {
+    const cleanDomain = domain.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '');
+    return this.DIRECTORY_DOMAINS.some(dir => cleanDomain.includes(dir));
+  }
+
+  /**
    * Scrape a single domain for contact information
    */
   async scrapeDomain(
     domain: string,
     options: { timeout?: number } = {}
   ): Promise<ScrapingResult> {
-    const { timeout = 10000 } = options;
+    const { timeout = 3000 } = options; // Reduced from 10000ms to 3000ms
+
+    // Skip known directory sites
+    if (this.isDirectorySite(domain)) {
+      return {
+        email: null,
+        phone: null,
+        error: 'DIRECTORY_SITE_SKIPPED',
+      };
+    }
+
+    // Skip if this domain already failed on first page
+    if (this.failedDomains.has(domain)) {
+      return {
+        email: null,
+        phone: null,
+        error: 'DOMAIN_PREVIOUSLY_FAILED',
+      };
+    }
 
     try {
+      let firstPageFailed = false;
+
       // Try multiple contact pages
       for (const path of this.CONTACT_PATHS) {
         const url = this.buildUrl(domain, path);
@@ -54,6 +136,12 @@ export class DomainScraperService {
             return { ...result, error: null };
           }
         } catch (error) {
+          // If first page (home page) fails, mark domain as failed and stop trying other pages
+          if (path === '') {
+            firstPageFailed = true;
+            this.failedDomains.add(domain);
+            throw error; // Throw to exit and return error
+          }
           // Continue to next path if this one fails
           continue;
         }
@@ -222,10 +310,13 @@ export class DomainScraperService {
     const {
       concurrency = 10, // Scrape 10 domains at a time
       batchSize = 100,
-      timeout = 10000,
+      timeout = 3000, // Reduced from 10000ms to 3000ms
       onProgress,
       onError,
     } = options;
+
+    // Clear failed domains set at the start of a new scraping session
+    this.failedDomains.clear();
 
     console.log(`[DomainScraperService] Starting scraping of ${domains.length} domains`);
     console.log(`[DomainScraperService] Concurrency: ${concurrency}, Batch size: ${batchSize}`);
