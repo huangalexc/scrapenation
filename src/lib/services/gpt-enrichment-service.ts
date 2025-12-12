@@ -70,7 +70,10 @@ Important:
 - Set null for any field you cannot find or are very unsure about
 - Domain should be just the domain name (e.g., "example.com", not "https://example.com")
 - Be conservative with confidence scores - only use high scores (>80) when very certain
-- Phone numbers should be in standard format with country code if available`;
+- Phone numbers should be in standard format with country code if available
+- CRITICAL: If the search results are for a business in a DIFFERENT city or state than specified (${location}), return null for all fields and 0 confidence
+- Example: If looking for "Vitality Chiropractic" in NC but results show Rochester, MN location → return all nulls
+- Only extract information if you are confident the results match the specified location`;
   }
 
   /**

@@ -204,19 +204,56 @@ export class DomainScraperService {
     // Remove script and style tags
     $('script, style, noscript').remove();
 
-    // Get visible text content
-    const text = $('body').text();
+    const allEmails: string[] = [];
+    const allPhones: string[] = [];
 
-    // Extract emails
-    const emails = text.match(this.EMAIL_REGEX) || [];
-    const cleanedEmails = emails
+    // 1. Extract emails from mailto: links
+    $('a[href^="mailto:"]').each((_, elem) => {
+      const href = $(elem).attr('href');
+      if (href) {
+        const email = href.replace('mailto:', '').split('?')[0]; // Remove query params
+        allEmails.push(email);
+      }
+    });
+
+    // 2. Extract emails from visible text
+    const text = $('body').text();
+    const textEmails = text.match(this.EMAIL_REGEX) || [];
+    allEmails.push(...textEmails);
+
+    // 3. Extract emails from all href and data attributes (backup)
+    $('*').each((_, elem) => {
+      const attrs = elem.attribs || {};
+      Object.values(attrs).forEach((value) => {
+        if (typeof value === 'string') {
+          const matches = value.match(this.EMAIL_REGEX) || [];
+          allEmails.push(...matches);
+        }
+      });
+    });
+
+    // 4. Extract phone numbers from tel: links
+    $('a[href^="tel:"]').each((_, elem) => {
+      const href = $(elem).attr('href');
+      if (href) {
+        const phone = href.replace('tel:', '').trim();
+        allPhones.push(phone);
+      }
+    });
+
+    // 5. Extract phone numbers from visible text
+    const textPhones = text.match(this.PHONE_REGEX) || [];
+    allPhones.push(...textPhones);
+
+    // Clean and deduplicate emails
+    const cleanedEmails = [...new Set(allEmails)]
       .map((email) => this.cleanEmail(email))
       .filter((email) => this.isValidEmail(email))
       .filter((email) => !this.isGenericEmail(email));
 
-    // Extract phone numbers
-    const phones = text.match(this.PHONE_REGEX) || [];
-    const validPhones = phones.filter((phone) => this.isValidPhone(phone));
+    // Clean and deduplicate phones
+    const validPhones = [...new Set(allPhones)]
+      .filter((phone) => this.isValidPhone(phone));
 
     return {
       email: cleanedEmails[0] || null,
