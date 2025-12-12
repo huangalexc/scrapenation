@@ -5,19 +5,14 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-// Validate DATABASE_URL is available
+// Get connection string
 const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error('DATABASE_URL environment variable is required');
-}
 
-// Create Neon adapter with connection config
-const adapter = new PrismaNeon({ connectionString });
-
+// Create Prisma client (adapter only if DATABASE_URL is available)
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    adapter,
+    ...(connectionString && { adapter: new PrismaNeon({ connectionString }) }),
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
   });
 
