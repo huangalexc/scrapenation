@@ -223,13 +223,15 @@ export class DomainScraperService {
 
     // 3. Extract emails from all href and data attributes (backup)
     $('*').each((_, elem) => {
-      const attrs = elem.attribs || {};
-      Object.values(attrs).forEach((value) => {
-        if (typeof value === 'string') {
-          const matches = value.match(this.EMAIL_REGEX) || [];
-          allEmails.push(...matches);
-        }
-      });
+      // Type guard: only process elements that have attribs
+      if ('attribs' in elem && elem.attribs) {
+        Object.values(elem.attribs).forEach((value) => {
+          if (typeof value === 'string') {
+            const matches = value.match(this.EMAIL_REGEX) || [];
+            allEmails.push(...matches);
+          }
+        });
+      }
     });
 
     // 4. Extract phone numbers from tel: links
