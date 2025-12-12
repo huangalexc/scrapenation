@@ -1,4 +1,4 @@
-import { customSearchService } from './custom-search-service';
+import { dataForSEOService } from './dataforseo-service';
 import { gptEnrichmentService } from './gpt-enrichment-service';
 import { processBatch } from '../utils/batch';
 import { logError } from '../utils/errors';
@@ -18,15 +18,22 @@ export class SERPEnrichmentService {
    */
   async enrichBusiness(business: BusinessToEnrich): Promise<EnrichedBusiness> {
     try {
-      // Step 1: Perform Custom Search
-      const serpResults = await customSearchService.searchBusiness(
-        business.name,
-        business.city,
-        business.state,
-        10
-      );
+      // Step 1: Build search query
+      const query = `${business.name} ${business.city || ''} ${business.state || ''}`.trim();
 
-      // Step 2: Extract information using GPT
+      // Step 2: Perform DataForSEO SERP search
+      const serpResponse = await dataForSEOService.searchGoogle(query, {
+        depth: 10, // Get top 10 results
+      });
+
+      // Convert to format expected by GPT
+      const serpResults = serpResponse.results.map(result => ({
+        title: result.title || '',
+        link: result.url || '',
+        snippet: result.description || '',
+      }));
+
+      // Step 3: Extract information using GPT
       const enrichment = await gptEnrichmentService.extractBusinessInfo(
         business.name,
         business.city,

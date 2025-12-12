@@ -21,6 +21,11 @@ export const env = {
     apiKey: process.env.OPENAI_API_KEY || '',
   },
 
+  // DataForSEO
+  dataForSEO: {
+    base64Credentials: process.env.DATAFORSEO_BASE64_API_CREDENTIALS || '',
+  },
+
   // NextAuth
   nextAuth: {
     secret: process.env.NEXTAUTH_SECRET || '',
