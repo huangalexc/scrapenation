@@ -76,9 +76,14 @@ export class DomainScraperService {
   private readonly CONTACT_PATHS = [
     '',
     '/contact',
+    '/contact/',
     '/contact-us',
+    '/contact-us/',
+    '/contactus',
     '/about',
+    '/about/',
     '/about-us',
+    '/about-us/',
   ];
 
   /**
@@ -253,14 +258,47 @@ export class DomainScraperService {
       .filter((email) => this.isValidEmail(email))
       .filter((email) => !this.isGenericEmail(email));
 
+    // Prioritize emails: info@ and contact@ first, then others
+    const bestEmail = this.selectBestEmail(cleanedEmails);
+
     // Clean and deduplicate phones
     const validPhones = [...new Set(allPhones)]
       .filter((phone) => this.isValidPhone(phone));
 
     return {
-      email: cleanedEmails[0] || null,
+      email: bestEmail,
       phone: validPhones[0] || null,
     };
+  }
+
+  /**
+   * Select the best email from a list of valid emails
+   * Prioritize: info@, contact@, hello@, admin@, then others
+   */
+  private selectBestEmail(emails: string[]): string | null {
+    if (emails.length === 0) return null;
+    if (emails.length === 1) return emails[0];
+
+    // Define priority prefixes
+    const priorities = [
+      'info@',
+      'contact@',
+      'hello@',
+      'admin@',
+      'support@',
+      'sales@',
+      'office@',
+      'frontdesk@',
+    ];
+
+    // Find first email matching priority order
+    for (const prefix of priorities) {
+      const match = emails.find(email => email.toLowerCase().startsWith(prefix));
+      if (match) return match;
+    }
+
+    // Return first email if no priority match
+    return emails[0];
   }
 
   /**
@@ -288,18 +326,22 @@ export class DomainScraperService {
    * Check if email is generic/not useful
    */
   private isGenericEmail(email: string): boolean {
+    const lowerEmail = email.toLowerCase();
+
+    // Only filter out truly generic/automated emails
     const genericPatterns = [
       'noreply',
       'no-reply',
       'donotreply',
-      'example',
-      'test',
-      'admin@',
-      'webmaster@',
+      'do-not-reply',
+      'example.com',
+      'test.com',
       'support@example',
+      'info@example',
+      'contact@example',
     ];
 
-    return genericPatterns.some((pattern) => email.toLowerCase().includes(pattern));
+    return genericPatterns.some((pattern) => lowerEmail.includes(pattern));
   }
 
   /**
