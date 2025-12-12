@@ -13,7 +13,29 @@ export class ZipCodeService {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    const csvPath = path.join(process.cwd(), 'data', 'zip_codes.csv');
+    // Try multiple possible paths for the CSV file
+    // 1. From project root (for Next.js app)
+    // 2. From worker directory (for Railway worker service)
+    const possiblePaths = [
+      path.join(process.cwd(), 'data', 'zip_codes.csv'),
+      path.join(process.cwd(), '..', 'data', 'zip_codes.csv'),
+      path.resolve(__dirname, '../../../data/zip_codes.csv'),
+    ];
+
+    let csvPath: string | null = null;
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        csvPath = p;
+        break;
+      }
+    }
+
+    if (!csvPath) {
+      throw new Error(
+        `Could not find zip_codes.csv. Tried paths:\n${possiblePaths.join('\n')}`
+      );
+    }
+
     const csvContent = fs.readFileSync(csvPath, 'utf-8');
 
     const records = parse(csvContent, {
