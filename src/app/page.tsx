@@ -8,10 +8,10 @@ export default function HomePage() {
     <div className="container mx-auto py-16">
       <div className="max-w-3xl mx-auto text-center mb-12">
         <h1 className="text-5xl font-bold tracking-tight mb-4">
-          ScrapENation
+          ScrapeNation
         </h1>
         <p className="text-xl text-muted-foreground">
-          Discover and enrich businesses across the United States using Google Places, Custom Search, and AI-powered data extraction.
+          Discover and enrich businesses across the United States using Google Places, DataForSEO SERP API, and AI-powered data extraction.
         </p>
       </div>
 
@@ -93,7 +93,7 @@ export default function HomePage() {
                   3
                 </span>
                 <div>
-                  <strong>SERP Enrichment</strong> - Extract domain, email, phone using Custom Search + GPT
+                  <strong>SERP Enrichment</strong> - Extract domain, email, phone using DataForSEO + GPT
                 </div>
               </li>
               <li className="flex gap-3">
