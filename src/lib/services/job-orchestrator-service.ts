@@ -205,6 +205,9 @@ export class JobOrchestratorService {
         where: { id: jobId },
         data: {
           status: 'COMPLETED',
+          placesApiCalls: zipCodes.length,
+          customSearchCalls: enriched.length,
+          openaiCalls: enriched.length,
           estimatedCost,
         },
       });
