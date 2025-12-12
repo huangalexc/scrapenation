@@ -6,9 +6,10 @@ import { BusinessFilters } from '@/components/business-filters';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useBusinessFilterStore } from '@/lib/stores/business-filter-store';
-import { getBusinesses, getAvailableStates } from '@/app/actions/business-actions';
+import { getBusinesses, getAvailableStates, deleteBusinesses } from '@/app/actions/business-actions';
 import type { Business } from '@prisma/client';
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Trash2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export default function BusinessesPage() {
   const { filters, setFilter } = useBusinessFilterStore();
@@ -17,6 +18,9 @@ export default function BusinessesPage() {
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
   const [availableStates, setAvailableStates] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { toast } = useToast();
 
   // Load available states
   useEffect(() => {
@@ -28,7 +32,7 @@ export default function BusinessesPage() {
   }, []);
 
   // Load businesses when filters change
-  useEffect(() => {
+  const loadBusinesses = () => {
     setLoading(true);
     getBusinesses(filters)
       .then((result) => {
@@ -41,7 +45,50 @@ export default function BusinessesPage() {
       .finally(() => {
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    loadBusinesses();
   }, [filters]);
+
+  const handleRefresh = () => {
+    setSelectedIds(new Set());
+    loadBusinesses();
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+
+    if (!confirm(`Are you sure you want to delete ${selectedIds.size} businesses?`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const result = await deleteBusinesses(Array.from(selectedIds));
+      if (result.success) {
+        toast({
+          title: 'Success',
+          description: `Successfully deleted ${result.data?.count} businesses`,
+        });
+        handleRefresh();
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error || 'Failed to delete businesses',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleSort = (field: string) => {
     if (filters.sortBy === field) {
@@ -134,6 +181,28 @@ export default function BusinessesPage() {
             </CardContent>
           </Card>
 
+          {/* Bulk Actions */}
+          {selectedIds.size > 0 && (
+            <Card>
+              <CardContent className="py-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    <strong>{selectedIds.size}</strong> business{selectedIds.size === 1 ? '' : 'es'} selected
+                  </p>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleBulkDelete}
+                    disabled={isDeleting}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Selected
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Business Table */}
           {loading ? (
             <Card>
@@ -147,6 +216,9 @@ export default function BusinessesPage() {
               sortBy={filters.sortBy}
               sortOrder={filters.sortOrder}
               onSort={handleSort}
+              onDelete={handleRefresh}
+              selectedIds={selectedIds}
+              onSelectionChange={setSelectedIds}
             />
           )}
         </div>

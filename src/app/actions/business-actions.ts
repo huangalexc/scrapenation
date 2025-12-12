@@ -178,3 +178,44 @@ export async function getAvailableBusinessTypes(): Promise<ActionResult<string[]
     };
   }
 }
+
+export async function deleteBusiness(id: string): Promise<ActionResult<void>> {
+  try {
+    await prisma.business.delete({
+      where: { id },
+    });
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    const errorResponse = createErrorResponse(error);
+    return {
+      success: false,
+      error: errorResponse.error.message,
+    };
+  }
+}
+
+export async function deleteBusinesses(ids: string[]): Promise<ActionResult<{ count: number }>> {
+  try {
+    const result = await prisma.business.deleteMany({
+      where: {
+        id: {
+          in: ids,
+        },
+      },
+    });
+
+    return {
+      success: true,
+      data: { count: result.count },
+    };
+  } catch (error) {
+    const errorResponse = createErrorResponse(error);
+    return {
+      success: false,
+      error: errorResponse.error.message,
+    };
+  }
+}
