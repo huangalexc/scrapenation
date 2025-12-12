@@ -1,5 +1,4 @@
 import { Client, PlaceInputType } from '@googlemaps/google-maps-services-js';
-import { parseAddress } from 'parse-address';
 import { env } from '../config/env';
 import { PlacesAPIError, QuotaExceededError, logError } from '../utils/errors';
 import { withRetry, shouldRetryError, isQuotaError } from '../utils/retry';

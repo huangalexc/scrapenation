@@ -44,7 +44,6 @@
     "openai": "^6.10.0",
     "p-limit": "^7.2.0",
     "p-queue": "^9.0.1",
-    "parse-address": "^1.1.2",
     "react": "19.2.1",
     "react-dom": "19.2.1",
     "resend": "^6.1.3",
