@@ -29,7 +29,7 @@ export class SERPEnrichmentService {
       // Convert to format expected by GPT
       const serpResults = serpResponse.results.map(result => ({
         title: result.title || '',
-        link: result.url || '',
+        url: result.url || '',
         snippet: result.description || '',
       }));
 
