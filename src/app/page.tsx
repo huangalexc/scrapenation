@@ -10,9 +10,17 @@ export default function HomePage() {
         <h1 className="text-5xl font-bold tracking-tight mb-4">
           ScrapeNation
         </h1>
-        <p className="text-xl text-muted-foreground">
+        <p className="text-xl text-muted-foreground mb-6">
           Discover and enrich businesses across the United States using Google Places, DataForSEO SERP API, and AI-powered data extraction.
         </p>
+        <div className="flex gap-4 justify-center">
+          <Button asChild size="lg">
+            <Link href="/signup">Get Started Free</Link>
+          </Button>
+          <Button asChild size="lg" variant="outline">
+            <Link href="/login">Log In</Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">

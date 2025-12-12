@@ -3,16 +3,19 @@ import { zipCodeService } from './zipcode-service';
 import { placesService } from './places-service';
 import { serpEnrichmentService } from './serp-enrichment-service';
 import { domainScraperService } from './domain-scraper-service';
+import { tierLimitsService } from './tier-limits-service';
 import { logError } from '../utils/errors';
 import type { Job, JobStatus } from '@prisma/client';
 import type { BusinessToEnrich } from '../types/enrichment';
 import type { DomainToScrape } from '../types/scraping';
 
 export interface JobConfig {
+  userId: string;
   businessType: string;
   geography: string[]; // Array of states or ["nationwide"]
   zipPercentage?: number;
   minDomainConfidence?: number;
+  zipCodes?: string[]; // Optional explicit list of ZIP codes
 }
 
 export interface JobProgress {
@@ -31,12 +34,29 @@ export class JobOrchestratorService {
   /**
    * Create a new scraping job (Railway worker will pick it up)
    */
-  async startJob(config: JobConfig): Promise<string> {
+  async startJob(config: JobConfig): Promise<{ success: boolean; jobId?: string; error?: string }> {
     console.log(`[JobOrchestrator] Creating new job`, config);
+
+    // Check if user can create a job
+    const canCreate = await tierLimitsService.canCreateJob(config.userId);
+    if (!canCreate.allowed) {
+      return { success: false, error: canCreate.reason };
+    }
+
+    // Validate job configuration against tier limits
+    const validConfig = await tierLimitsService.validateJobConfig(config.userId, {
+      geography: config.geography,
+      zipCodes: config.zipCodes,
+    });
+
+    if (!validConfig.valid) {
+      return { success: false, error: validConfig.reason };
+    }
 
     // Create job record as PENDING (worker will process it)
     const job = await prisma.job.create({
       data: {
+        userId: config.userId,
         businessType: config.businessType,
         geography: config.geography,
         zipPercentage: config.zipPercentage || 30,
@@ -44,9 +64,12 @@ export class JobOrchestratorService {
       },
     });
 
+    // Increment job counter
+    await tierLimitsService.incrementJobCount(config.userId);
+
     console.log(`[JobOrchestrator] Created job ${job.id} - waiting for worker to process`);
 
-    return job.id;
+    return { success: true, jobId: job.id };
   }
 
   /**
@@ -55,6 +78,7 @@ export class JobOrchestratorService {
   async executeJob(jobId: string): Promise<void> {
     const job = await prisma.job.findUnique({
       where: { id: jobId },
+      include: { user: true },
     });
 
     if (!job) {
@@ -62,6 +86,7 @@ export class JobOrchestratorService {
     }
 
     const config: JobConfig = {
+      userId: job.userId,
       businessType: job.businessType,
       geography: job.geography,
       zipPercentage: job.zipPercentage,
@@ -190,17 +215,33 @@ export class JobOrchestratorService {
   }
 
   /**
-   * Select ZIP codes based on configuration
+   * Select ZIP codes based on configuration and enforce tier limits
    */
   private async selectZipCodes(config: JobConfig) {
     const isNationwide =
       config.geography.length === 1 && config.geography[0].toLowerCase() === 'nationwide';
 
-    return zipCodeService.getFilteredZipCodes({
+    const zipCodes = await zipCodeService.getFilteredZipCodes({
       states: isNationwide ? undefined : config.geography,
       nationwide: isNationwide,
       topPercent: config.zipPercentage || 30,
     });
+
+    // Get user's tier limits
+    const tierInfo = await tierLimitsService.getUserTierInfo(config.userId);
+    if (!tierInfo) {
+      throw new Error('User not found');
+    }
+
+    // Enforce ZIP code limit for free tier
+    if (tierInfo.tier === 'FREE' && zipCodes.length > tierInfo.limits.maxZipsPerJob) {
+      console.log(
+        `[JobOrchestrator] Free tier limit: restricting to ${tierInfo.limits.maxZipsPerJob} ZIP codes (found ${zipCodes.length})`
+      );
+      return zipCodes.slice(0, tierInfo.limits.maxZipsPerJob);
+    }
+
+    return zipCodes;
   }
 
   /**

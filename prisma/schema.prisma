@@ -98,11 +98,14 @@ model Job {
   errorLog String? @map("error_log") @db.Text
 
   // Relationships
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   businesses Business[]
 
   @@index([status])
   @@index([createdAt])
   @@index([businessType])
+  @@index([userId])
   @@map("jobs")
 }
 
@@ -113,4 +116,53 @@ enum JobStatus {
   COMPLETED
   FAILED
   CANCELLED
+}
+
+// User model - authentication and account management
+model User {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Authentication fields
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  emailVerified DateTime? @map("email_verified")
+
+  // User tier
+  tier UserTier @default(FREE)
+
+  // Free tier usage tracking (reset monthly or per job)
+  jobsCreated Int @default(0) @map("jobs_created")
+
+  // Relationships
+  jobs Job[]
+
+  @@index([email])
+  @@map("users")
+}
+
+enum UserTier {
+  FREE
+  PRO
+}
+
+// Verification token model - for email verification and password reset
+model VerificationToken {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  email     String
+  token     String   @unique
+  expires   DateTime
+  type      TokenType
+
+  @@index([email])
+  @@index([token])
+  @@map("verification_tokens")
+}
+
+enum TokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
 }
