@@ -11,13 +11,14 @@ datasource db {
 }
 
 // Business model - stores all data from Google Places + enrichment
+// Businesses are deduplicated across users by placeId
 model Business {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Google Places Nearby Search fields
-  placeId            String  @unique @map("place_id")
+  placeId            String  @unique @map("place_id") // Unique identifier for deduplication
   name               String
   formattedAddress   String  @map("formatted_address")
   latitude           Float
@@ -46,11 +47,12 @@ model Business {
   domainPhone        String? @map("domain_phone")
   scrapeError        String? @map("scrape_error") // Error code if scraping failed
 
-  // Relationship to job
-  jobId String? @map("job_id")
-  job   Job?    @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  // Many-to-many relationships
+  userBusinesses UserBusiness[] // Users who have access to this business
+  jobBusinesses  JobBusiness[]  // Jobs that found this business
 
   // Indexes for filtering and sorting
+  @@index([placeId]) // Fast lookup for deduplication
   @@index([state])
   @@index([businessType])
   @@index([rating])
@@ -61,7 +63,6 @@ model Business {
   @@index([serpPhone])
   @@index([domainEmail])
   @@index([domainPhone])
-  @@index([jobId])
   @@index([city, state])
   @@map("businesses")
 }
@@ -100,7 +101,7 @@ model Job {
   // Relationships
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  businesses Business[]
+  jobBusinesses JobBusiness[] // Many-to-many with businesses
 
   @@index([status])
   @@index([createdAt])
@@ -137,6 +138,7 @@ model User {
 
   // Relationships
   jobs Job[]
+  userBusinesses UserBusiness[] // Many-to-many with businesses
 
   @@index([email])
   @@map("users")
@@ -165,4 +167,47 @@ model VerificationToken {
 enum TokenType {
   EMAIL_VERIFICATION
   PASSWORD_RESET
+}
+
+// Junction table: User access to businesses (many-to-many)
+// This enables business deduplication across users while maintaining access control
+model UserBusiness {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId     String @map("user_id")
+  businessId String @map("business_id")
+
+  // Track how this user got access (for analytics/support)
+  jobId String? @map("job_id")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId]) // One access record per user-business pair
+  @@index([userId]) // Fast lookup of user's businesses
+  @@index([businessId]) // Fast lookup of business access
+  @@index([jobId]) // Track which job gave access
+  @@map("user_businesses")
+}
+
+// Junction table: Track which jobs found which businesses (for analytics)
+// This helps track API cost savings from deduplication
+model JobBusiness {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  jobId      String @map("job_id")
+  businessId String @map("business_id")
+
+  // Track if this was a new business or reused (for cost analytics)
+  wasReused Boolean @default(false) @map("was_reused")
+
+  job      Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, businessId]) // One record per job-business pair
+  @@index([jobId]) // Fast lookup of job's businesses
+  @@index([businessId]) // Fast lookup of business usage
+  @@map("job_businesses")
 }
