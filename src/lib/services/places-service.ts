@@ -26,22 +26,38 @@ export class PlacesService {
   }
 
   /**
-   * Parse address into components
+   * Extract city, state, and postal code from Google Places address_components
    */
-  private parseAddressComponents(formattedAddress: string): {
+  private extractAddressComponents(place: any): {
     city?: string;
     state?: string;
     postalCode?: string;
   } {
     try {
-      const parsed = parseAddress(formattedAddress);
+      const components = place.address_components || [];
+      let city: string | undefined;
+      let state: string | undefined;
+      let postalCode: string | undefined;
+
+      for (const component of components) {
+        const types = component.types || [];
+
+        if (types.includes('locality')) {
+          city = component.long_name;
+        } else if (types.includes('administrative_area_level_1')) {
+          state = component.short_name; // Use short_name for state abbreviation (e.g., "NC")
+        } else if (types.includes('postal_code')) {
+          postalCode = component.long_name;
+        }
+      }
+
       return {
-        city: parsed?.city || undefined,
-        state: parsed?.state || undefined,
-        postalCode: parsed?.zip || undefined,
+        city,
+        state,
+        postalCode,
       };
     } catch (error) {
-      logError(error as Error, { formattedAddress });
+      logError(error as Error, { place: place?.place_id });
       return {};
     }
   }
@@ -147,7 +163,7 @@ export class PlacesService {
    */
   private transformPlace(place: any, businessType: string): PlaceResult {
     const formattedAddress = place.vicinity || place.formatted_address || '';
-    const addressComponents = this.parseAddressComponents(formattedAddress);
+    const addressComponents = this.extractAddressComponents(place);
 
     return {
       placeId: place.place_id,

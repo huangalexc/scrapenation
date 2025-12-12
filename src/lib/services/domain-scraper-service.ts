@@ -15,10 +15,11 @@ export interface ScrapingOptions {
 }
 
 export class DomainScraperService {
+  // Remove word boundaries to handle emails in concatenated text
   private readonly EMAIL_REGEX =
-    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+    /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}/g;
   private readonly PHONE_REGEX =
-    /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
+    /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
 
   /**
    * Known business directories and third-party sites to skip
@@ -208,7 +209,8 @@ export class DomainScraperService {
 
     // Extract emails
     const emails = text.match(this.EMAIL_REGEX) || [];
-    const validEmails = emails
+    const cleanedEmails = emails
+      .map((email) => this.cleanEmail(email))
       .filter((email) => this.isValidEmail(email))
       .filter((email) => !this.isGenericEmail(email));
 
@@ -217,9 +219,19 @@ export class DomainScraperService {
     const validPhones = phones.filter((phone) => this.isValidPhone(phone));
 
     return {
-      email: validEmails[0] || null,
+      email: cleanedEmails[0] || null,
       phone: validPhones[0] || null,
     };
+  }
+
+  /**
+   * Clean up extracted email by removing trailing non-email characters
+   */
+  private cleanEmail(email: string): string {
+    // Remove common trailing characters that get captured (Opening, Hours, etc.)
+    // Match only the valid email part
+    const match = email.match(/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    return match ? match[0] : email;
   }
 
   /**
