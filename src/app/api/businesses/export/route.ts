@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/lib/auth/auth';
 import { prisma } from '@/lib/prisma';
 import { businessFilterSchema } from '@/lib/schemas/job-schemas';
 
@@ -7,6 +8,12 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    // Check authentication
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const searchParams = request.nextUrl.searchParams;
 
     // Parse query parameters
@@ -32,8 +39,14 @@ export async function GET(request: NextRequest) {
 
     const filters = businessFilterSchema.parse(params);
 
-    // Build where clause (same as getBusinesses)
-    const where: any = {};
+    // Build where clause - filter by user access via UserBusiness junction table
+    const where: any = {
+      userBusinesses: {
+        some: {
+          userId: session.user.id,
+        },
+      },
+    };
 
     if (filters.state) {
       where.state = filters.state;
@@ -78,7 +91,7 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    // Fetch all matching businesses
+    // Fetch all matching businesses (only those accessible to this user)
     const businesses = await prisma.business.findMany({
       where,
       orderBy: {

@@ -247,29 +247,104 @@ export class JobOrchestratorService {
   }
 
   /**
-   * Save businesses to database
+   * Save businesses to database with deduplication
+   * Returns count of new vs reused businesses for cost tracking
    */
-  private async saveBusinesses(jobId: string, places: any[]): Promise<void> {
-    // Use createMany for bulk insert
-    await prisma.business.createMany({
-      data: places.map((place) => ({
-        jobId,
-        placeId: place.placeId,
-        name: place.name,
-        formattedAddress: place.formattedAddress,
-        latitude: place.latitude,
-        longitude: place.longitude,
-        rating: place.rating,
-        userRatingsTotal: place.userRatingsTotal,
-        priceLevel: place.priceLevel,
-        types: place.types,
-        businessType: place.businessType,
-        city: place.city,
-        state: place.state,
-        postalCode: place.postalCode,
-      })),
-      skipDuplicates: true, // Skip if place_id already exists
+  private async saveBusinesses(
+    jobId: string,
+    places: any[]
+  ): Promise<{ newCount: number; reusedCount: number }> {
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
+      select: { userId: true },
     });
+
+    if (!job) throw new Error(`Job ${jobId} not found`);
+
+    const placeIds = places.map((p) => p.placeId);
+
+    // Find existing businesses by placeId
+    const existingBusinesses = await prisma.business.findMany({
+      where: {
+        placeId: { in: placeIds },
+      },
+      select: { id: true, placeId: true },
+    });
+
+    const existingPlaceIdMap = new Map(
+      existingBusinesses.map((b) => [b.placeId, b.id])
+    );
+
+    // Separate new vs existing
+    const newPlaces = places.filter((p) => !existingPlaceIdMap.has(p.placeId));
+    const reusedPlaces = places.filter((p) => existingPlaceIdMap.has(p.placeId));
+
+    console.log(
+      `[JobOrchestrator] Deduplication: ${newPlaces.length} new, ${reusedPlaces.length} reused (${((reusedPlaces.length / places.length) * 100).toFixed(1)}% cost savings)`
+    );
+
+    // Create new businesses
+    if (newPlaces.length > 0) {
+      await prisma.business.createMany({
+        data: newPlaces.map((place) => ({
+          placeId: place.placeId,
+          name: place.name,
+          formattedAddress: place.formattedAddress,
+          latitude: place.latitude,
+          longitude: place.longitude,
+          rating: place.rating,
+          userRatingsTotal: place.userRatingsTotal,
+          priceLevel: place.priceLevel,
+          types: place.types,
+          businessType: place.businessType,
+          city: place.city,
+          state: place.state,
+          postalCode: place.postalCode,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    // Get all business IDs (newly created + existing)
+    const allBusinesses = await prisma.business.findMany({
+      where: {
+        placeId: { in: placeIds },
+      },
+      select: { id: true, placeId: true },
+    });
+
+    const placeIdToBusinessId = new Map(
+      allBusinesses.map((b) => [b.placeId, b.id])
+    );
+
+    // Create JobBusiness records (track which job found which business)
+    const jobBusinessRecords = places.map((place) => ({
+      jobId,
+      businessId: placeIdToBusinessId.get(place.placeId)!,
+      wasReused: existingPlaceIdMap.has(place.placeId),
+    }));
+
+    await prisma.jobBusiness.createMany({
+      data: jobBusinessRecords,
+      skipDuplicates: true,
+    });
+
+    // Create UserBusiness records (grant user access to businesses)
+    const userBusinessRecords = places.map((place) => ({
+      userId: job.userId,
+      businessId: placeIdToBusinessId.get(place.placeId)!,
+      jobId,
+    }));
+
+    await prisma.userBusiness.createMany({
+      data: userBusinessRecords,
+      skipDuplicates: true, // User might already have access from previous job
+    });
+
+    return {
+      newCount: newPlaces.length,
+      reusedCount: reusedPlaces.length,
+    };
   }
 
   /**

@@ -1,5 +1,6 @@
 'use server';
 
+import { auth } from '@/lib/auth/auth';
 import { prisma } from '@/lib/prisma';
 import { businessFilterSchema } from '@/lib/schemas/job-schemas';
 import { createErrorResponse } from '@/lib/utils/errors';
@@ -21,10 +22,25 @@ export type BusinessesResult = {
 
 export async function getBusinesses(input: unknown): Promise<ActionResult<BusinessesResult>> {
   try {
+    // Check authentication
+    const session = await auth();
+    if (!session?.user?.id) {
+      return {
+        success: false,
+        error: 'Unauthorized',
+      };
+    }
+
     const filters = businessFilterSchema.parse(input);
 
-    // Build where clause
-    const where: any = {};
+    // Build where clause - filter by user access via UserBusiness junction table
+    const where: any = {
+      userBusinesses: {
+        some: {
+          userId: session.user.id,
+        },
+      },
+    };
 
     if (filters.state) {
       where.state = filters.state;
@@ -134,10 +150,25 @@ export async function getBusinessById(id: string): Promise<ActionResult<Business
 
 export async function getAvailableStates(): Promise<ActionResult<string[]>> {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return {
+        success: false,
+        error: 'Unauthorized',
+      };
+    }
+
     const result = await prisma.business.findMany({
       select: { state: true },
       distinct: ['state'],
-      where: { state: { not: null } },
+      where: {
+        state: { not: null },
+        userBusinesses: {
+          some: {
+            userId: session.user.id,
+          },
+        },
+      },
       orderBy: { state: 'asc' },
     });
 
@@ -158,9 +189,24 @@ export async function getAvailableStates(): Promise<ActionResult<string[]>> {
 
 export async function getAvailableBusinessTypes(): Promise<ActionResult<string[]>> {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return {
+        success: false,
+        error: 'Unauthorized',
+      };
+    }
+
     const result = await prisma.business.findMany({
       select: { businessType: true },
       distinct: ['businessType'],
+      where: {
+        userBusinesses: {
+          some: {
+            userId: session.user.id,
+          },
+        },
+      },
       orderBy: { businessType: 'asc' },
     });
 
@@ -181,8 +227,21 @@ export async function getAvailableBusinessTypes(): Promise<ActionResult<string[]
 
 export async function deleteBusiness(id: string): Promise<ActionResult<void>> {
   try {
-    await prisma.business.delete({
-      where: { id },
+    const session = await auth();
+    if (!session?.user?.id) {
+      return {
+        success: false,
+        error: 'Unauthorized',
+      };
+    }
+
+    // Only delete the UserBusiness record (remove user's access)
+    // Don't delete the business itself - other users might have access
+    await prisma.userBusiness.deleteMany({
+      where: {
+        businessId: id,
+        userId: session.user.id,
+      },
     });
 
     return {
@@ -199,11 +258,22 @@ export async function deleteBusiness(id: string): Promise<ActionResult<void>> {
 
 export async function deleteBusinesses(ids: string[]): Promise<ActionResult<{ count: number }>> {
   try {
-    const result = await prisma.business.deleteMany({
+    const session = await auth();
+    if (!session?.user?.id) {
+      return {
+        success: false,
+        error: 'Unauthorized',
+      };
+    }
+
+    // Only delete the UserBusiness records (remove user's access)
+    // Don't delete the businesses themselves - other users might have access
+    const result = await prisma.userBusiness.deleteMany({
       where: {
-        id: {
+        businessId: {
           in: ids,
         },
+        userId: session.user.id,
       },
     });
 
