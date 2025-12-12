@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -18,8 +18,10 @@ export async function GET(
       );
     }
 
+    const { id } = await params;
+
     const job = await prisma.job.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: {
         id: true,
         businessType: true,
