@@ -24,7 +24,10 @@ export async function getBusinesses(input: unknown): Promise<ActionResult<Busine
   try {
     // Check authentication
     const session = await auth();
+    console.log('[getBusinesses] Session:', session?.user?.id ? `User ID: ${session.user.id}` : 'No session');
+
     if (!session?.user?.id) {
+      console.log('[getBusinesses] Unauthorized - no session');
       return {
         success: false,
         error: 'Unauthorized',
@@ -32,6 +35,7 @@ export async function getBusinesses(input: unknown): Promise<ActionResult<Busine
     }
 
     const filters = businessFilterSchema.parse(input);
+    console.log('[getBusinesses] Filters:', filters);
 
     // Build where clause - filter by user access via UserBusiness junction table
     const where: any = {
@@ -90,6 +94,7 @@ export async function getBusinesses(input: unknown): Promise<ActionResult<Busine
 
     // Get total count
     const total = await prisma.business.count({ where });
+    console.log('[getBusinesses] Total businesses found:', total);
 
     // Get paginated results
     const businesses = await prisma.business.findMany({
@@ -100,6 +105,8 @@ export async function getBusinesses(input: unknown): Promise<ActionResult<Busine
       skip: (filters.page - 1) * filters.pageSize,
       take: filters.pageSize,
     });
+
+    console.log('[getBusinesses] Returning', businesses.length, 'businesses');
 
     const totalPages = Math.ceil(total / filters.pageSize);
 
