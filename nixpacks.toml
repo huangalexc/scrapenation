@@ -2,7 +2,7 @@
 nixPkgs = ['nodejs_20']
 
 [phases.install]
-cmds = ['npm install', 'npx prisma generate']
+cmds = ['npm ci', 'npx prisma generate']
 
 # Skip Next.js build - worker service doesn't need it
 [phases.build]
