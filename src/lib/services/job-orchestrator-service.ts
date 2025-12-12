@@ -115,6 +115,8 @@ export class JobOrchestratorService {
       const places = await placesService.searchMultipleLocations(
         zipCodes.map((zip) => ({
           zipCode: zip.zipCode,
+          city: zip.city,
+          state: zip.state,
           latitude: zip.latitude,
           longitude: zip.longitude,
           radiusMiles: zip.radiusMi,

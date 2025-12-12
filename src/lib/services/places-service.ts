@@ -131,7 +131,10 @@ export class PlacesService {
    * Search for places near a location with pagination
    * Retrieves up to 3 pages (60 results total)
    */
-  async searchPlacesNearby(params: NearbySearchParams): Promise<PlaceResult[]> {
+  async searchPlacesNearby(
+    params: NearbySearchParams,
+    fallbackLocation?: { city: string; state: string }
+  ): Promise<PlaceResult[]> {
     const allResults: any[] = [];
     let nextPageToken: string | undefined;
     let pageCount = 0;
@@ -155,15 +158,23 @@ export class PlacesService {
     }
 
     // Transform results to our format
-    return allResults.map((place) => this.transformPlace(place, params.keyword));
+    return allResults.map((place) => this.transformPlace(place, params.keyword, fallbackLocation));
   }
 
   /**
    * Transform Google Places result to our PlaceResult format
    */
-  private transformPlace(place: any, businessType: string): PlaceResult {
+  private transformPlace(
+    place: any,
+    businessType: string,
+    fallbackLocation?: { city: string; state: string }
+  ): PlaceResult {
     const formattedAddress = place.vicinity || place.formatted_address || '';
     const addressComponents = this.extractAddressComponents(place);
+
+    // Use fallback location if city/state not found in address_components
+    const city = addressComponents.city || fallbackLocation?.city;
+    const state = addressComponents.state || fallbackLocation?.state;
 
     return {
       placeId: place.place_id,
@@ -176,7 +187,9 @@ export class PlacesService {
       priceLevel: place.price_level,
       types: place.types || [],
       businessType,
-      ...addressComponents,
+      city,
+      state,
+      postalCode: addressComponents.postalCode,
     };
   }
 
@@ -186,6 +199,8 @@ export class PlacesService {
   async searchMultipleLocations(
     locations: Array<{
       zipCode: string;
+      city: string;
+      state: string;
       latitude: number;
       longitude: number;
       radiusMiles: number;
@@ -200,12 +215,18 @@ export class PlacesService {
       const location = locations[i];
 
       try {
-        const places = await this.searchPlacesNearby({
-          latitude: location.latitude,
-          longitude: location.longitude,
-          radiusMeters: this.milesToMeters(location.radiusMiles),
-          keyword: businessType,
-        });
+        const places = await this.searchPlacesNearby(
+          {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            radiusMeters: this.milesToMeters(location.radiusMiles),
+            keyword: businessType,
+          },
+          {
+            city: location.city,
+            state: location.state,
+          }
+        );
 
         // Deduplicate by place_id
         const newPlaces = places.filter((place) => {
