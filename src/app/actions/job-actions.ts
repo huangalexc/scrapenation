@@ -1,5 +1,6 @@
 'use server';
 
+import { auth } from '@/lib/auth/auth';
 import { jobOrchestratorService } from '@/lib/services/job-orchestrator-service';
 import { createJobSchema } from '@/lib/schemas/job-schemas';
 import { createErrorResponse } from '@/lib/utils/errors';
@@ -13,18 +14,35 @@ export type ActionResult<T> = {
 
 export async function createJob(input: unknown): Promise<ActionResult<{ jobId: string }>> {
   try {
+    const session = await auth();
+
+    if (!session?.user) {
+      return {
+        success: false,
+        error: 'You must be logged in to create a job',
+      };
+    }
+
     const validated = createJobSchema.parse(input);
 
-    const jobId = await jobOrchestratorService.startJob({
+    const result = await jobOrchestratorService.startJob({
+      userId: session.user.id,
       businessType: validated.businessType,
       geography: validated.geography,
       zipPercentage: validated.zipPercentage,
       minDomainConfidence: validated.minDomainConfidence,
     });
 
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error,
+      };
+    }
+
     return {
       success: true,
-      data: { jobId },
+      data: { jobId: result.jobId! },
     };
   } catch (error) {
     const errorResponse = createErrorResponse(error);
