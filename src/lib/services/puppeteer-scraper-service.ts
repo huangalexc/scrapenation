@@ -86,7 +86,7 @@ export class PuppeteerScraperService {
           });
 
           // Wait a bit for any lazy-loaded content
-          await page.waitForTimeout(1000);
+          await new Promise(resolve => setTimeout(resolve, 1000));
 
           // Extract page content
           const content = await page.content();
