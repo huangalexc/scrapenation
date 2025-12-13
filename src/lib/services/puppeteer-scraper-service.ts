@@ -57,13 +57,16 @@ export class PuppeteerScraperService {
           headless: true,
         });
       } else {
-        // Development: Skip Puppeteer (not configured for local use)
-        console.log(`[PuppeteerScraper] Skipping Puppeteer in development - would require full puppeteer package`);
-        return {
-          email: null,
-          phone: null,
-          error: 'PUPPETEER_DEV_SKIP',
-        };
+        // Development: Use local Chromium from puppeteer package
+        console.log(`[PuppeteerScraper] Using local Chromium in development mode`);
+        const puppeteerFull = await import('puppeteer');
+        browser = await puppeteerFull.default.launch({
+          headless: true,
+          defaultViewport: {
+            width: 1920,
+            height: 1080,
+          },
+        });
       }
 
       const page = await browser.newPage();
