@@ -167,9 +167,17 @@ export class JobOrchestratorService {
         console.log(`[JobOrchestrator] Step 3: Enriching with SERP + GPT`);
         await this.setCheckpoint(jobId, 'enrichment');
 
+        // Get the current count of already-enriched businesses
+        const alreadyEnriched = await prisma.business.count({
+          where: {
+            jobBusinesses: { some: { jobId } },
+            serpDomain: { not: null },
+          },
+        });
+
         // Get businesses that haven't been enriched yet
         const businessesToEnrich = await this.getUnenrichedBusinesses(jobId);
-        console.log(`[JobOrchestrator] ${businessesToEnrich.length} businesses need enrichment (${job.businessesEnriched} already done)`);
+        console.log(`[JobOrchestrator] ${businessesToEnrich.length} businesses need enrichment (${alreadyEnriched} already done)`);
 
         if (businessesToEnrich.length > 0) {
           const newlyEnriched = await serpEnrichmentService.enrichBusinesses(
@@ -179,9 +187,9 @@ export class JobOrchestratorService {
               batchSize: 50,
               onProgress: (completed, total) => {
                 this.updateJobProgress(jobId, {
-                  businessesEnriched: job.businessesEnriched + completed,
-                  customSearchCalls: job.customSearchCalls + completed,
-                  openaiCalls: job.openaiCalls + completed,
+                  businessesEnriched: alreadyEnriched + completed,
+                  customSearchCalls: alreadyEnriched + completed,
+                  openaiCalls: alreadyEnriched + completed,
                 });
               },
             }
