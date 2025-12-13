@@ -247,7 +247,6 @@ export class JobOrchestratorService {
         if (domainsToScrape.length > 0) {
           // Process in smaller batches and save incrementally to avoid losing progress on stall
           const SCRAPE_BATCH_SIZE = 5; // Save every 5 domains (reduced from 10 due to continued stalls)
-          let totalScraped = 0;
 
           for (let i = 0; i < domainsToScrape.length; i += SCRAPE_BATCH_SIZE) {
             const batch = domainsToScrape.slice(i, i + SCRAPE_BATCH_SIZE);
@@ -262,14 +261,34 @@ export class JobOrchestratorService {
 
             // Save results immediately after each batch
             await this.updateBusinessesWithScraping(scraped);
-            totalScraped += scraped.length;
 
-            // Update progress ONLY after successful database save
-            await this.updateJobProgress(jobId, { businessesScraped: alreadyScraped + totalScraped });
-            console.log(`[JobOrchestrator] Saved batch ${Math.floor(i / SCRAPE_BATCH_SIZE) + 1} - Total scraped: ${totalScraped}/${domainsToScrape.length}`);
+            // Query database to get ACTUAL count of scraped domains (don't trust scraped.length)
+            const currentScraped = await prisma.business.count({
+              where: {
+                jobBusinesses: { some: { jobId } },
+                OR: [
+                  { domainEmail: { not: null } },
+                  { scrapeError: { not: null } },
+                ],
+              },
+            });
+
+            // Update progress ONLY after successful database save, using actual DB count
+            await this.updateJobProgress(jobId, { businessesScraped: currentScraped });
+            console.log(`[JobOrchestrator] Saved batch ${Math.floor(i / SCRAPE_BATCH_SIZE) + 1} - Total scraped: ${currentScraped}/${alreadyScraped + domainsToScrape.length}`);
           }
 
-          console.log(`[JobOrchestrator] Completed all scraping - ${totalScraped} domains`);
+          // Get final count from database
+          const finalScraped = await prisma.business.count({
+            where: {
+              jobBusinesses: { some: { jobId } },
+              OR: [
+                { domainEmail: { not: null } },
+                { scrapeError: { not: null } },
+              ],
+            },
+          });
+          console.log(`[JobOrchestrator] Completed all scraping - ${finalScraped} domains`);
         }
       } else {
         console.log(`[JobOrchestrator] Step 4: Skipping domain scraping (already completed)`);
