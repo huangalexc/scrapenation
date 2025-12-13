@@ -32,6 +32,11 @@ export class PuppeteerScraperService {
   ];
 
   /**
+   * Track domains that have timed out to skip them in future attempts
+   */
+  private timeoutDomains = new Set<string>();
+
+  /**
    * Scrape a domain using headless browser (for JavaScript-rendered content)
    */
   async scrapeDomain(
@@ -40,7 +45,19 @@ export class PuppeteerScraperService {
   ): Promise<PuppeteerScrapingResult> {
     const { timeout = 10000 } = options;
 
+    // Skip domains that have previously timed out
+    if (this.timeoutDomains.has(domain)) {
+      console.log(`[PuppeteerScraper] Skipping ${domain} - previously timed out`);
+      return {
+        email: null,
+        phone: null,
+        error: 'DOMAIN_TIMEOUT_SKIP',
+      };
+    }
+
     let browser;
+    let hasTimedOut = false;
+
     try {
       console.log(`[PuppeteerScraper] Starting browser for ${domain} (${isProduction ? 'production' : 'development'} mode)`);
 
@@ -83,10 +100,20 @@ export class PuppeteerScraperService {
             return { ...result, error: null };
           }
         } catch (error) {
-          console.log(`[PuppeteerScraper] Error on ${path}:`, (error as Error).message);
-          // Continue to next path if this one fails
+          const errorMessage = (error as Error).message;
+          console.log(`[PuppeteerScraper] Error on ${path}:`, errorMessage);
+
+          // Check if this is a timeout error
+          if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+            console.log(`[PuppeteerScraper] Timeout detected for ${domain} - marking for exclusion and stopping`);
+            hasTimedOut = true;
+            this.timeoutDomains.add(domain);
+            break; // Stop trying other paths for this domain
+          }
+
+          // Continue to next path for other errors
           if (path === '') {
-            // If home page fails, we should still try contact pages
+            // If home page fails (non-timeout), we should still try contact pages
             continue;
           }
           continue;
@@ -94,6 +121,15 @@ export class PuppeteerScraperService {
       }
 
       await browser.close();
+
+      // If we stopped due to timeout, return timeout error
+      if (hasTimedOut) {
+        return {
+          email: null,
+          phone: null,
+          error: 'NAVIGATION_TIMEOUT',
+        };
+      }
 
       // No contact info found on any page
       return {
