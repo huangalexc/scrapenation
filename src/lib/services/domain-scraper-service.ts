@@ -108,7 +108,7 @@ export class DomainScraperService {
     domain: string,
     options: { timeout?: number; usePuppeteerFallback?: boolean } = {}
   ): Promise<ScrapingResult> {
-    const { timeout = 3000, usePuppeteerFallback = false } = options;
+    const { timeout = 5000, usePuppeteerFallback = false } = options;
 
     // Skip known directory sites
     if (this.isDirectorySite(domain)) {
@@ -451,7 +451,7 @@ export class DomainScraperService {
     const {
       concurrency = 10, // Scrape 10 domains at a time
       batchSize = 100,
-      timeout = 3000, // Reduced from 10000ms to 3000ms
+      timeout = 5000, // 5 second timeout for HTTP requests
       usePuppeteerFallback = true, // Enable Puppeteer fallback by default
       onProgress,
       onError,

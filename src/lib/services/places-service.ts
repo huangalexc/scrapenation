@@ -129,11 +129,12 @@ export class PlacesService {
   /**
    * Search for places near a location with pagination
    * Retrieves up to 3 pages (60 results total)
+   * Returns results and the number of API calls made
    */
   async searchPlacesNearby(
     params: NearbySearchParams,
     fallbackLocation?: { city: string; state: string }
-  ): Promise<PlaceResult[]> {
+  ): Promise<{ places: PlaceResult[]; apiCallsMade: number }> {
     const allResults: any[] = [];
     let nextPageToken: string | undefined;
     let pageCount = 0;
@@ -157,7 +158,12 @@ export class PlacesService {
     }
 
     // Transform results to our format
-    return allResults.map((place) => this.transformPlace(place, params.keyword, fallbackLocation));
+    const places = allResults.map((place) => this.transformPlace(place, params.keyword, fallbackLocation));
+
+    return {
+      places,
+      apiCallsMade: pageCount, // Number of API calls made for this location
+    };
   }
 
   /**
@@ -205,16 +211,17 @@ export class PlacesService {
       radiusMiles: number;
     }>,
     businessType: string,
-    onProgress?: (completed: number, total: number) => void
+    onProgress?: (completed: number, total: number, apiCalls?: number) => void
   ): Promise<PlaceResult[]> {
     const allPlaces: PlaceResult[] = [];
     const seenPlaceIds = new Set<string>();
+    let totalApiCalls = 0;
 
     for (let i = 0; i < locations.length; i++) {
       const location = locations[i];
 
       try {
-        const places = await this.searchPlacesNearby(
+        const result = await this.searchPlacesNearby(
           {
             latitude: location.latitude,
             longitude: location.longitude,
@@ -227,8 +234,11 @@ export class PlacesService {
           }
         );
 
+        // Track API calls
+        totalApiCalls += result.apiCallsMade;
+
         // Deduplicate by place_id
-        const newPlaces = places.filter((place) => {
+        const newPlaces = result.places.filter((place) => {
           if (seenPlaceIds.has(place.placeId)) {
             return false;
           }
@@ -239,7 +249,7 @@ export class PlacesService {
         allPlaces.push(...newPlaces);
 
         if (onProgress) {
-          onProgress(i + 1, locations.length);
+          onProgress(i + 1, locations.length, totalApiCalls);
         }
 
         // Rate limiting: small delay between requests
