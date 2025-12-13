@@ -4,12 +4,14 @@ import { ScrapingError, logError } from '../utils/errors';
 import { withRetry, isRetryableNetworkError } from '../utils/retry';
 import { processBatch } from '../utils/batch';
 import type { ScrapingResult, DomainToScrape, ScrapedDomain } from '../types/scraping';
+import { puppeteerScraperService } from './puppeteer-scraper-service';
 
 export interface ScrapingOptions {
   concurrency?: number;
   batchSize?: number;
   timeout?: number;
   minConfidenceThreshold?: number;
+  usePuppeteerFallback?: boolean; // Enable Puppeteer fallback for failed scrapes
   onProgress?: (completed: number, total: number) => void;
   onError?: (error: Error, domain: DomainToScrape) => void;
 }
@@ -104,9 +106,9 @@ export class DomainScraperService {
    */
   async scrapeDomain(
     domain: string,
-    options: { timeout?: number } = {}
+    options: { timeout?: number; usePuppeteerFallback?: boolean } = {}
   ): Promise<ScrapingResult> {
-    const { timeout = 3000 } = options; // Reduced from 10000ms to 3000ms
+    const { timeout = 3000, usePuppeteerFallback = false } = options;
 
     // Skip known directory sites
     if (this.isDirectorySite(domain)) {
@@ -128,6 +130,7 @@ export class DomainScraperService {
 
     try {
       let firstPageFailed = false;
+      let bestResult: { email: string | null; phone: string | null } = { email: null, phone: null };
 
       // Try multiple contact pages
       for (const path of this.CONTACT_PATHS) {
@@ -137,9 +140,14 @@ export class DomainScraperService {
           const html = await this.fetchPage(url, timeout);
           const result = this.extractContactInfo(html);
 
-          // If we found something, return it
-          if (result.email || result.phone) {
+          // If we found email, return it immediately
+          if (result.email) {
             return { ...result, error: null };
+          }
+
+          // Store phone if found (but keep looking for email)
+          if (result.phone && !bestResult.phone) {
+            bestResult.phone = result.phone;
           }
         } catch (error) {
           // If first page (home page) fails, mark domain as failed and stop trying other pages
@@ -153,15 +161,55 @@ export class DomainScraperService {
         }
       }
 
-      // No contact info found on any page
+      // No email found with Cheerio
+      // Try Puppeteer fallback if enabled and no email was found
+      if (usePuppeteerFallback && !bestResult.email) {
+        console.log(`[DomainScraper] Cheerio found no email for ${domain}, trying Puppeteer...`);
+        try {
+          const puppeteerResult = await puppeteerScraperService.scrapeDomain(domain, { timeout: 10000 });
+          if (puppeteerResult.email) {
+            console.log(`[DomainScraper] ✅ Puppeteer found email for ${domain}: ${puppeteerResult.email}`);
+            // Combine Puppeteer email with Cheerio phone if we have it
+            return {
+              email: puppeteerResult.email,
+              phone: puppeteerResult.phone || bestResult.phone,
+              error: null,
+            };
+          }
+          // If Puppeteer found phone but not email, use it
+          if (puppeteerResult.phone && !bestResult.phone) {
+            bestResult.phone = puppeteerResult.phone;
+          }
+        } catch (puppeteerError) {
+          console.log(`[DomainScraper] Puppeteer also failed for ${domain}`);
+          // Fall through to return what we have
+        }
+      }
+
+      // Return whatever we found (might just be phone, or nothing)
       return {
-        email: null,
-        phone: null,
-        error: 'NO_CONTACT_INFO_FOUND',
+        email: bestResult.email,
+        phone: bestResult.phone,
+        error: bestResult.email || bestResult.phone ? null : 'NO_CONTACT_INFO_FOUND',
       };
     } catch (error) {
       const errorMessage = this.classifyError(error);
       logError(error as Error, { domain });
+
+      // Try Puppeteer fallback if enabled and Cheerio had an error
+      if (usePuppeteerFallback) {
+        console.log(`[DomainScraper] Cheerio error for ${domain}, trying Puppeteer fallback...`);
+        try {
+          const puppeteerResult = await puppeteerScraperService.scrapeDomain(domain, { timeout: 10000 });
+          if (puppeteerResult.email || puppeteerResult.phone) {
+            console.log(`[DomainScraper] Puppeteer recovered from Cheerio error for ${domain}`);
+            return puppeteerResult;
+          }
+        } catch (puppeteerError) {
+          console.log(`[DomainScraper] Puppeteer also failed for ${domain}`);
+          // Fall through to return original error
+        }
+      }
 
       return {
         email: null,
@@ -404,6 +452,7 @@ export class DomainScraperService {
       concurrency = 10, // Scrape 10 domains at a time
       batchSize = 100,
       timeout = 3000, // Reduced from 10000ms to 3000ms
+      usePuppeteerFallback = true, // Enable Puppeteer fallback by default
       onProgress,
       onError,
     } = options;
@@ -417,7 +466,7 @@ export class DomainScraperService {
     const results = await processBatch(
       domains,
       async (domain) => {
-        const result = await this.scrapeDomain(domain.domain, { timeout });
+        const result = await this.scrapeDomain(domain.domain, { timeout, usePuppeteerFallback });
         return {
           ...domain,
           result,
