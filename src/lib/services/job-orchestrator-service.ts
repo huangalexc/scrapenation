@@ -154,6 +154,7 @@ export class JobOrchestratorService {
 
         console.log(`[JobOrchestrator] Found ${places.length} unique businesses`);
         await this.saveBusinesses(jobId, places);
+        await this.updateJobProgress(jobId, { businessesFound: places.length });
       } else {
         console.log(`[JobOrchestrator] Step 2: Skipping Places search (already completed)`);
         // Load existing businesses from database
