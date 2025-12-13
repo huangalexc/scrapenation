@@ -205,16 +205,28 @@ export class JobOrchestratorService {
 
         const minConfidence = config.minDomainConfidence || 70;
 
+        // Get the current count of already-scraped businesses
+        const alreadyScraped = await prisma.business.count({
+          where: {
+            jobBusinesses: { some: { jobId } },
+            OR: [
+              { domainEmail: { not: null } },
+              { scrapeError: { not: null } },
+            ],
+          },
+        });
+
         // Get domains that haven't been scraped yet
         const domainsToScrape = await this.getUnscrapedDomains(jobId, minConfidence);
-        console.log(`[JobOrchestrator] ${domainsToScrape.length} domains need scraping (${job.businessesScraped} already done)`);
+        console.log(`[JobOrchestrator] ${domainsToScrape.length} domains need scraping (${alreadyScraped} already done)`);
 
         if (domainsToScrape.length > 0) {
           const scraped = await domainScraperService.scrapeDomains(domainsToScrape, {
             concurrency: 10,
             batchSize: 100,
             onProgress: (completed, total) => {
-              this.updateJobProgress(jobId, { businessesScraped: job.businessesScraped + completed });
+              // Use actual count from database, not stale job.businessesScraped
+              this.updateJobProgress(jobId, { businessesScraped: alreadyScraped + completed });
             },
           });
 
