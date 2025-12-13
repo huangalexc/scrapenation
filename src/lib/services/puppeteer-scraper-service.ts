@@ -32,9 +32,9 @@ export class PuppeteerScraperService {
   ];
 
   /**
-   * Track domains that have timed out to skip them in future attempts
+   * Track domains that have failed (timeout, DNS error, etc.) to skip them in future attempts
    */
-  private timeoutDomains = new Set<string>();
+  private failedDomains = new Set<string>();
 
   /**
    * Scrape a domain using headless browser (for JavaScript-rendered content)
@@ -45,18 +45,19 @@ export class PuppeteerScraperService {
   ): Promise<PuppeteerScrapingResult> {
     const { timeout = 10000 } = options;
 
-    // Skip domains that have previously timed out
-    if (this.timeoutDomains.has(domain)) {
-      console.log(`[PuppeteerScraper] Skipping ${domain} - previously timed out`);
+    // Skip domains that have previously failed
+    if (this.failedDomains.has(domain)) {
+      console.log(`[PuppeteerScraper] Skipping ${domain} - previously failed`);
       return {
         email: null,
         phone: null,
-        error: 'DOMAIN_TIMEOUT_SKIP',
+        error: 'DOMAIN_PREVIOUSLY_FAILED',
       };
     }
 
     let browser;
-    let hasTimedOut = false;
+    let hasFailed = false;
+    let failureReason = 'PUPPETEER_ERROR';
 
     try {
       console.log(`[PuppeteerScraper] Starting browser for ${domain} (${isProduction ? 'production' : 'development'} mode)`);
@@ -74,8 +75,65 @@ export class PuppeteerScraperService {
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       );
 
-      // Try multiple contact pages
-      for (const path of this.CONTACT_PATHS) {
+      // Try first path to detect persistent errors
+      const firstPath = this.CONTACT_PATHS[0];
+      const firstUrl = this.buildUrl(domain, firstPath);
+
+      try {
+        console.log(`[PuppeteerScraper] Checking ${firstUrl}`);
+
+        await page.goto(firstUrl, {
+          waitUntil: 'networkidle0',
+          timeout,
+        });
+
+        // Wait a bit for any lazy-loaded content
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Extract page content
+        const content = await page.content();
+        const result = this.extractContactInfo(content);
+
+        // If we found something on first page, return it
+        if (result.email || result.phone) {
+          console.log(`[PuppeteerScraper] Found contact info on ${firstPath || 'home page'}`);
+          await browser.close();
+          return { ...result, error: null };
+        }
+      } catch (error) {
+        const errorMessage = (error as Error).message;
+        console.log(`[PuppeteerScraper] Error on ${firstPath}:`, errorMessage);
+
+        // Check for persistent errors that will affect all paths
+        if (errorMessage.includes('ERR_NAME_NOT_RESOLVED') ||
+            errorMessage.includes('ENOTFOUND') ||
+            errorMessage.includes('ERR_CONNECTION_REFUSED') ||
+            errorMessage.includes('ERR_CONNECTION_RESET')) {
+          console.log(`[PuppeteerScraper] DNS/Connection error for ${domain} - marking for exclusion`);
+          hasFailed = true;
+          failureReason = 'DNS_OR_CONNECTION_ERROR';
+          this.failedDomains.add(domain);
+        } else if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+          console.log(`[PuppeteerScraper] Timeout detected for ${domain} - marking for exclusion`);
+          hasFailed = true;
+          failureReason = 'NAVIGATION_TIMEOUT';
+          this.failedDomains.add(domain);
+        }
+
+        // If it's a persistent error, don't try other paths
+        if (hasFailed) {
+          await browser.close();
+          return {
+            email: null,
+            phone: null,
+            error: failureReason,
+          };
+        }
+      }
+
+      // Try remaining contact pages (only if first page didn't have persistent error)
+      for (let i = 1; i < this.CONTACT_PATHS.length; i++) {
+        const path = this.CONTACT_PATHS[i];
         const url = this.buildUrl(domain, path);
 
         try {
@@ -95,41 +153,19 @@ export class PuppeteerScraperService {
 
           // If we found something, return it
           if (result.email || result.phone) {
-            console.log(`[PuppeteerScraper] Found contact info on ${path || 'home page'}`);
+            console.log(`[PuppeteerScraper] Found contact info on ${path}`);
             await browser.close();
             return { ...result, error: null };
           }
         } catch (error) {
           const errorMessage = (error as Error).message;
           console.log(`[PuppeteerScraper] Error on ${path}:`, errorMessage);
-
-          // Check if this is a timeout error
-          if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
-            console.log(`[PuppeteerScraper] Timeout detected for ${domain} - marking for exclusion and stopping`);
-            hasTimedOut = true;
-            this.timeoutDomains.add(domain);
-            break; // Stop trying other paths for this domain
-          }
-
-          // Continue to next path for other errors
-          if (path === '') {
-            // If home page fails (non-timeout), we should still try contact pages
-            continue;
-          }
+          // Continue to next path for non-persistent errors on subsequent pages
           continue;
         }
       }
 
       await browser.close();
-
-      // If we stopped due to timeout, return timeout error
-      if (hasTimedOut) {
-        return {
-          email: null,
-          phone: null,
-          error: 'NAVIGATION_TIMEOUT',
-        };
-      }
 
       // No contact info found on any page
       return {
