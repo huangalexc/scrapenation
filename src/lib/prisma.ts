@@ -13,13 +13,21 @@ const connectionString = process.env.DATABASE_URL;
 const isVercel = process.env.VERCEL === '1';
 
 // Create Prisma client
+// During build, DATABASE_URL might not be available - that's OK since we don't actually connect during build
 export const prisma =
   globalForPrisma.prisma ??
-  new PrismaClient({
-    // Only use Neon adapter on Vercel (has WebSocket support)
+  (() => {
+    const config: any = {
+      log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    };
+
+    // Only use Neon adapter on Vercel (has WebSocket support) AND when DATABASE_URL is available
     // Railway will use standard Prisma client with pooled connection
-    ...(connectionString && isVercel && { adapter: new PrismaNeon({ connectionString }) }),
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  });
+    if (connectionString && isVercel) {
+      config.adapter = new PrismaNeon({ connectionString });
+    }
+
+    return new PrismaClient(config);
+  })();
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
