@@ -108,8 +108,12 @@ export class PuppeteerScraperService {
         if (errorMessage.includes('ERR_NAME_NOT_RESOLVED') ||
             errorMessage.includes('ENOTFOUND') ||
             errorMessage.includes('ERR_CONNECTION_REFUSED') ||
-            errorMessage.includes('ERR_CONNECTION_RESET')) {
-          console.log(`[PuppeteerScraper] DNS/Connection error for ${domain} - marking for exclusion`);
+            errorMessage.includes('ERR_CONNECTION_RESET') ||
+            errorMessage.includes('ERR_SSL_VERSION_OR_CIPHER_MISMATCH') ||
+            errorMessage.includes('ERR_SSL_PROTOCOL_ERROR') ||
+            errorMessage.includes('EPROTO') ||
+            errorMessage.includes('ssl/tls alert')) {
+          console.log(`[PuppeteerScraper] DNS/Connection/SSL error for ${domain} - marking for exclusion`);
           hasFailed = true;
           failureReason = 'DNS_OR_CONNECTION_ERROR';
           this.failedDomains.add(domain);
