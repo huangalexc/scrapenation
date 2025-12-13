@@ -44,29 +44,10 @@ export class PuppeteerScraperService {
     try {
       console.log(`[PuppeteerScraper] Starting browser for ${domain} (${isProduction ? 'production' : 'development'} mode)`);
 
-      // Launch browser with environment-specific settings
-      if (isProduction) {
-        // Production: Use Lambda-compatible Chromium
-        browser = await puppeteer.launch({
-          args: chromium.args,
-          defaultViewport: {
-            width: 1920,
-            height: 1080,
-          },
-          executablePath: await chromium.executablePath(),
-          headless: true,
-        });
-      } else {
-        // Development: Use local Chromium from puppeteer package
-        console.log(`[PuppeteerScraper] Using local Chromium in development mode`);
-        const puppeteerFull = await import('puppeteer');
-        browser = await puppeteerFull.default.launch({
-          headless: true,
-          defaultViewport: {
-            width: 1920,
-            height: 1080,
-          },
-        });
+      // Launch browser with retry logic (handles ETXTBSY errors on Railway)
+      browser = await this.launchBrowserWithRetry();
+      if (!browser) {
+        throw new Error('Failed to launch browser after retries');
       }
 
       const page = await browser.newPage();
@@ -133,6 +114,56 @@ export class PuppeteerScraperService {
         error: 'PUPPETEER_ERROR',
       };
     }
+  }
+
+  /**
+   * Launch browser with retry logic to handle ETXTBSY errors on Railway
+   */
+  private async launchBrowserWithRetry(maxRetries = 3): Promise<any> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        if (isProduction) {
+          // Production: Use Lambda-compatible Chromium
+          return await puppeteer.launch({
+            args: [...chromium.args, '--single-process'], // Add single-process flag for Railway
+            defaultViewport: {
+              width: 1920,
+              height: 1080,
+            },
+            executablePath: await chromium.executablePath(),
+            headless: true,
+          });
+        } else {
+          // Development: Use local Chromium from puppeteer package
+          console.log(`[PuppeteerScraper] Using local Chromium in development mode`);
+          const puppeteerFull = await import('puppeteer');
+          return await puppeteerFull.default.launch({
+            headless: true,
+            defaultViewport: {
+              width: 1920,
+              height: 1080,
+            },
+          });
+        }
+      } catch (error) {
+        const errorMessage = (error as Error).message;
+
+        // Check if it's an ETXTBSY error (file busy)
+        if (errorMessage.includes('ETXTBSY') || errorMessage.includes('spawn')) {
+          if (attempt < maxRetries) {
+            const waitTime = attempt * 500; // Exponential backoff: 500ms, 1000ms, 1500ms
+            console.log(`[PuppeteerScraper] Browser launch failed (attempt ${attempt}/${maxRetries}), retrying in ${waitTime}ms...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          }
+        }
+
+        // If not ETXTBSY or max retries reached, throw the error
+        throw error;
+      }
+    }
+
+    return null;
   }
 
   /**
