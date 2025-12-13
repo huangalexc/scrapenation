@@ -222,17 +222,30 @@ export class JobOrchestratorService {
         console.log(`[JobOrchestrator] ${domainsToScrape.length} domains need scraping (${alreadyScraped} already done)`);
 
         if (domainsToScrape.length > 0) {
-          const scraped = await domainScraperService.scrapeDomains(domainsToScrape, {
-            concurrency: 10,
-            batchSize: 100,
-            onProgress: (completed, total) => {
-              // Use actual count from database, not stale job.businessesScraped
-              this.updateJobProgress(jobId, { businessesScraped: alreadyScraped + completed });
-            },
-          });
+          // Process in smaller batches and save incrementally to avoid losing progress on stall
+          const SCRAPE_BATCH_SIZE = 25; // Save every 25 domains
+          let totalScraped = 0;
 
-          await this.updateBusinessesWithScraping(scraped);
-          console.log(`[JobOrchestrator] Scraped ${scraped.length} domains`);
+          for (let i = 0; i < domainsToScrape.length; i += SCRAPE_BATCH_SIZE) {
+            const batch = domainsToScrape.slice(i, i + SCRAPE_BATCH_SIZE);
+            console.log(`[JobOrchestrator] Scraping batch ${Math.floor(i / SCRAPE_BATCH_SIZE) + 1} (${batch.length} domains)`);
+
+            const scraped = await domainScraperService.scrapeDomains(batch, {
+              concurrency: 10,
+              batchSize: batch.length,
+              onProgress: (completed, total) => {
+                // Use actual count from database, not stale job.businessesScraped
+                this.updateJobProgress(jobId, { businessesScraped: alreadyScraped + totalScraped + completed });
+              },
+            });
+
+            // Save results immediately after each batch
+            await this.updateBusinessesWithScraping(scraped);
+            totalScraped += scraped.length;
+            console.log(`[JobOrchestrator] Saved batch ${Math.floor(i / SCRAPE_BATCH_SIZE) + 1} - Total scraped: ${totalScraped}/${domainsToScrape.length}`);
+          }
+
+          console.log(`[JobOrchestrator] Completed all scraping - ${totalScraped} domains`);
         }
       } else {
         console.log(`[JobOrchestrator] Step 4: Skipping domain scraping (already completed)`);

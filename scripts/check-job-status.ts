@@ -1,7 +1,7 @@
 import { prisma } from '../src/lib/prisma';
 
 async function checkJobStatus() {
-  const jobId = 'cmj4hb14h0001l504gmt6bbwk';
+  const jobId = 'cmj4ibjr70001k104n5u3jq85';
 
   const job = await prisma.job.findUnique({
     where: { id: jobId },
