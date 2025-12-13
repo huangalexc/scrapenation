@@ -528,18 +528,30 @@ export class JobOrchestratorService {
    * Update businesses with domain scraping data
    */
   private async updateBusinessesWithScraping(scraped: any[]): Promise<void> {
-    await Promise.all(
-      scraped.map((domain) =>
-        prisma.business.updateMany({
+    console.log(`[JobOrchestrator] Updating ${scraped.length} businesses with scraping results`);
+
+    const updateResults = await Promise.all(
+      scraped.map(async (domain) => {
+        const result = await prisma.business.updateMany({
           where: { placeId: domain.id },
           data: {
             domainEmail: domain.result.email,
             domainPhone: domain.result.phone,
             scrapeError: domain.result.error,
           },
-        })
-      )
+        });
+
+        // Log if update didn't match any records
+        if (result.count === 0) {
+          console.warn(`[JobOrchestrator] No business found with placeId: ${domain.id} (${domain.businessName})`);
+        }
+
+        return result;
+      })
     );
+
+    const totalUpdated = updateResults.reduce((sum, r) => sum + r.count, 0);
+    console.log(`[JobOrchestrator] Updated ${totalUpdated} businesses in database`);
   }
 
   /**
