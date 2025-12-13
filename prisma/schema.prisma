@@ -81,6 +81,10 @@ model Job {
   // Job status
   status JobStatus @default(PENDING)
 
+  // Checkpoint tracking (for resume capability)
+  currentStep String @default("pending") @map("current_step") // "zips", "places", "enrichment", "scraping", "completed"
+  lastProgressAt DateTime @default(now()) @map("last_progress_at") // Track stalls
+
   // Progress tracking
   totalZips           Int @default(0) @map("total_zips")
   zipsProcessed       Int @default(0) @map("zips_processed")

@@ -12,6 +12,7 @@ const prisma = new PrismaClient();
 
 const POLL_INTERVAL = 5000; // Poll every 5 seconds
 const MAX_CONCURRENT_JOBS = 3; // Process up to 3 jobs simultaneously
+const STALL_TIMEOUT = 120000; // 120 seconds (2 minutes)
 
 class WorkerService {
   private isRunning = false;
@@ -60,6 +61,30 @@ class WorkerService {
       },
       take: MAX_CONCURRENT_JOBS - this.activeJobs.size,
     });
+
+    // Check for stalled RUNNING jobs
+    const stalledJobs = await prisma.job.findMany({
+      where: {
+        status: 'RUNNING',
+        lastProgressAt: {
+          lt: new Date(Date.now() - STALL_TIMEOUT),
+        },
+      },
+    });
+
+    if (stalledJobs.length > 0) {
+      console.log(`[Worker] Found ${stalledJobs.length} stalled job(s) - resetting to PENDING for resume`);
+
+      for (const stalledJob of stalledJobs) {
+        console.log(`[Worker] Job ${stalledJob.id} stalled at step "${stalledJob.currentStep}" - will resume`);
+
+        // Reset to PENDING so it will be picked up and resumed
+        await prisma.job.update({
+          where: { id: stalledJob.id },
+          data: { status: 'PENDING' },
+        });
+      }
+    }
 
     if (pendingJobs.length === 0) {
       return;

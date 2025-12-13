@@ -97,117 +97,145 @@ export class JobOrchestratorService {
   }
 
   /**
-   * Main pipeline execution - all steps run with parallel processing
+   * Main pipeline execution - supports resume from checkpoint
    */
   private async runPipeline(jobId: string, config: JobConfig): Promise<void> {
     try {
-      console.log(`[JobOrchestrator] Starting pipeline for job ${jobId}`);
+      // Get current job state
+      const job = await prisma.job.findUnique({ where: { id: jobId } });
+      if (!job) throw new Error(`Job ${jobId} not found`);
 
-      // STEP 1: Select ZIP codes
-      console.log(`[JobOrchestrator] Step 1: Selecting ZIP codes`);
-      const zipCodes = await this.selectZipCodes(config);
-      await this.updateJobProgress(jobId, { totalZips: zipCodes.length });
+      const currentStep = job.currentStep;
+      console.log(`[JobOrchestrator] Starting pipeline for job ${jobId} from step: ${currentStep}`);
 
-      console.log(`[JobOrchestrator] Selected ${zipCodes.length} ZIP codes`);
+      let zipCodes: any[] = [];
+      let places: any[] = [];
+      let enriched: any[] = [];
 
-      // STEP 2: Search Places API (in parallel)
-      console.log(`[JobOrchestrator] Step 2: Searching Google Places`);
-      const places = await placesService.searchMultipleLocations(
-        zipCodes.map((zip) => ({
-          zipCode: zip.zipCode,
-          city: zip.city,
-          state: zip.state,
-          latitude: zip.latitude,
-          longitude: zip.longitude,
-          radiusMiles: zip.radiusMi,
-        })),
-        config.businessType,
-        (completed, total) => {
-          this.updateJobProgress(jobId, { zipsProcessed: completed });
+      // STEP 1: Select ZIP codes (skip if already done)
+      if (['pending', 'zips'].includes(currentStep)) {
+        console.log(`[JobOrchestrator] Step 1: Selecting ZIP codes`);
+        await this.setCheckpoint(jobId, 'zips');
+
+        zipCodes = await this.selectZipCodes(config);
+        await this.updateJobProgress(jobId, { totalZips: zipCodes.length });
+        console.log(`[JobOrchestrator] Selected ${zipCodes.length} ZIP codes`);
+      } else {
+        console.log(`[JobOrchestrator] Step 1: Skipping ZIP selection (already completed)`);
+      }
+
+      // STEP 2: Search Places API (skip if already done)
+      if (['pending', 'zips', 'places'].includes(currentStep)) {
+        console.log(`[JobOrchestrator] Step 2: Searching Google Places`);
+        await this.setCheckpoint(jobId, 'places');
+
+        // If we didn't just select ZIPs, we need to get them from config
+        if (zipCodes.length === 0) {
+          zipCodes = await this.selectZipCodes(config);
         }
-      );
 
-      console.log(`[JobOrchestrator] Found ${places.length} unique businesses`);
+        places = await placesService.searchMultipleLocations(
+          zipCodes.map((zip) => ({
+            zipCode: zip.zipCode,
+            city: zip.city,
+            state: zip.state,
+            latitude: zip.latitude,
+            longitude: zip.longitude,
+            radiusMiles: zip.radiusMi,
+          })),
+          config.businessType,
+          (completed, total) => {
+            this.updateJobProgress(jobId, { zipsProcessed: completed });
+          }
+        );
 
-      // Save businesses to database
-      await this.saveBusinesses(jobId, places);
-      await this.updateJobProgress(jobId, { businessesFound: places.length });
+        console.log(`[JobOrchestrator] Found ${places.length} unique businesses`);
+        await this.saveBusinesses(jobId, places);
+        await this.updateJobProgress(jobId, { businessesFound: places.length });
+      } else {
+        console.log(`[JobOrchestrator] Step 2: Skipping Places search (already completed)`);
+        // Load existing businesses from database
+        places = await this.loadBusinessesFromDatabase(jobId);
+        console.log(`[JobOrchestrator] Loaded ${places.length} businesses from database`);
+      }
 
-      // STEP 3: SERP Enrichment (in parallel batches)
-      console.log(`[JobOrchestrator] Step 3: Enriching with SERP + GPT`);
-      const businessesToEnrich: BusinessToEnrich[] = places.map((place) => ({
-        id: place.placeId,
-        name: place.name,
-        city: place.city || null,
-        state: place.state || null,
-      }));
+      // STEP 3: SERP Enrichment (resume from partial progress)
+      if (['pending', 'zips', 'places', 'enrichment'].includes(currentStep)) {
+        console.log(`[JobOrchestrator] Step 3: Enriching with SERP + GPT`);
+        await this.setCheckpoint(jobId, 'enrichment');
 
-      const enriched = await serpEnrichmentService.enrichBusinesses(
-        businessesToEnrich,
-        {
-          concurrency: 5, // 5 concurrent SERP + GPT calls
-          batchSize: 50,
-          onProgress: (completed, total) => {
-            this.updateJobProgress(jobId, {
-              businessesEnriched: completed,
-              customSearchCalls: completed,
-              openaiCalls: completed,
-            });
-          },
+        // Get businesses that haven't been enriched yet
+        const businessesToEnrich = await this.getUnenrichedBusinesses(jobId);
+        console.log(`[JobOrchestrator] ${businessesToEnrich.length} businesses need enrichment (${job.businessesEnriched} already done)`);
+
+        if (businessesToEnrich.length > 0) {
+          const newlyEnriched = await serpEnrichmentService.enrichBusinesses(
+            businessesToEnrich,
+            {
+              concurrency: 5,
+              batchSize: 50,
+              onProgress: (completed, total) => {
+                this.updateJobProgress(jobId, {
+                  businessesEnriched: job.businessesEnriched + completed,
+                  customSearchCalls: job.customSearchCalls + completed,
+                  openaiCalls: job.openaiCalls + completed,
+                });
+              },
+            }
+          );
+
+          await this.updateBusinessesWithEnrichment(newlyEnriched);
+          console.log(`[JobOrchestrator] Enriched ${newlyEnriched.length} businesses`);
         }
-      );
 
-      // Update businesses with enrichment data
-      await this.updateBusinessesWithEnrichment(enriched);
+        // Load all enriched businesses
+        enriched = await this.loadEnrichedBusinesses(jobId);
+      } else {
+        console.log(`[JobOrchestrator] Step 3: Skipping enrichment (already completed)`);
+        enriched = await this.loadEnrichedBusinesses(jobId);
+        console.log(`[JobOrchestrator] Loaded ${enriched.length} enriched businesses`);
+      }
 
-      console.log(`[JobOrchestrator] Enriched ${enriched.length} businesses`);
+      // STEP 4: Domain Scraping (resume from partial progress)
+      if (['pending', 'zips', 'places', 'enrichment', 'scraping'].includes(currentStep)) {
+        console.log(`[JobOrchestrator] Step 4: Scraping domains`);
+        await this.setCheckpoint(jobId, 'scraping');
 
-      // STEP 4: Domain Scraping (in parallel, only high-confidence domains)
-      console.log(`[JobOrchestrator] Step 4: Scraping domains`);
-      const minConfidence = config.minDomainConfidence || 70;
-      const domainsToScrape: DomainToScrape[] = enriched
-        .filter(
-          (b) =>
-            b.enrichment.domain &&
-            b.enrichment.domainConfidence &&
-            b.enrichment.domainConfidence >= minConfidence
-        )
-        .map((b) => ({
-          id: b.id,
-          domain: b.enrichment.domain!,
-          businessName: b.name,
-        }));
+        const minConfidence = config.minDomainConfidence || 70;
 
-      console.log(`[JobOrchestrator] Scraping ${domainsToScrape.length} high-confidence domains`);
+        // Get domains that haven't been scraped yet
+        const domainsToScrape = await this.getUnscrapedDomains(jobId, minConfidence);
+        console.log(`[JobOrchestrator] ${domainsToScrape.length} domains need scraping (${job.businessesScraped} already done)`);
 
-      const scraped = await domainScraperService.scrapeDomains(domainsToScrape, {
-        concurrency: 10, // 10 concurrent scrapes
-        batchSize: 100,
-        onProgress: (completed, total) => {
-          this.updateJobProgress(jobId, { businessesScraped: completed });
-        },
-      });
+        if (domainsToScrape.length > 0) {
+          const scraped = await domainScraperService.scrapeDomains(domainsToScrape, {
+            concurrency: 10,
+            batchSize: 100,
+            onProgress: (completed, total) => {
+              this.updateJobProgress(jobId, { businessesScraped: job.businessesScraped + completed });
+            },
+          });
 
-      // Update businesses with scraping data
-      await this.updateBusinessesWithScraping(scraped);
+          await this.updateBusinessesWithScraping(scraped);
+          console.log(`[JobOrchestrator] Scraped ${scraped.length} domains`);
+        }
+      } else {
+        console.log(`[JobOrchestrator] Step 4: Skipping domain scraping (already completed)`);
+      }
 
-      console.log(`[JobOrchestrator] Scraped ${scraped.length} domains`);
-
-      // Calculate costs
+      // Calculate costs and mark complete
+      const finalJob = await prisma.job.findUnique({ where: { id: jobId } });
       const estimatedCost = this.calculateCost({
-        placesApiCalls: zipCodes.length,
-        customSearchCalls: enriched.length,
-        openaiCalls: enriched.length,
+        placesApiCalls: finalJob!.placesApiCalls,
+        customSearchCalls: finalJob!.customSearchCalls,
+        openaiCalls: finalJob!.openaiCalls,
       });
 
-      // Mark job complete
       await prisma.job.update({
         where: { id: jobId },
         data: {
           status: 'COMPLETED',
-          placesApiCalls: zipCodes.length,
-          customSearchCalls: enriched.length,
-          openaiCalls: enriched.length,
+          currentStep: 'completed',
           estimatedCost,
         },
       });
@@ -217,6 +245,124 @@ export class JobOrchestratorService {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Set checkpoint and update lastProgressAt
+   */
+  private async setCheckpoint(jobId: string, step: string): Promise<void> {
+    await prisma.job.update({
+      where: { id: jobId },
+      data: {
+        currentStep: step,
+        lastProgressAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Load businesses from database for resume
+   */
+  private async loadBusinessesFromDatabase(jobId: string): Promise<any[]> {
+    const jobBusinesses = await prisma.jobBusiness.findMany({
+      where: { jobId },
+      include: { business: true },
+    });
+
+    return jobBusinesses.map(jb => ({
+      placeId: jb.business.placeId,
+      name: jb.business.name,
+      city: jb.business.city,
+      state: jb.business.state,
+    }));
+  }
+
+  /**
+   * Get businesses that haven't been enriched yet
+   */
+  private async getUnenrichedBusinesses(jobId: string): Promise<BusinessToEnrich[]> {
+    const businesses = await prisma.business.findMany({
+      where: {
+        jobBusinesses: { some: { jobId } },
+        serpDomain: null, // Not enriched yet
+      },
+      select: {
+        placeId: true,
+        name: true,
+        city: true,
+        state: true,
+      },
+    });
+
+    return businesses.map(b => ({
+      id: b.placeId,
+      name: b.name,
+      city: b.city || null,
+      state: b.state || null,
+    }));
+  }
+
+  /**
+   * Load all enriched businesses
+   */
+  private async loadEnrichedBusinesses(jobId: string): Promise<any[]> {
+    const businesses = await prisma.business.findMany({
+      where: {
+        jobBusinesses: { some: { jobId } },
+      },
+      select: {
+        placeId: true,
+        name: true,
+        city: true,
+        state: true,
+        serpDomain: true,
+        serpDomainConfidence: true,
+        serpEmail: true,
+        serpEmailConfidence: true,
+        serpPhone: true,
+        serpPhoneConfidence: true,
+      },
+    });
+
+    return businesses.map(b => ({
+      id: b.placeId,
+      name: b.name,
+      city: b.city,
+      state: b.state,
+      enrichment: {
+        domain: b.serpDomain,
+        domainConfidence: b.serpDomainConfidence,
+        email: b.serpEmail,
+        emailConfidence: b.serpEmailConfidence,
+        phone: b.serpPhone,
+        phoneConfidence: b.serpPhoneConfidence,
+      },
+    }));
+  }
+
+  /**
+   * Get domains that haven't been scraped yet
+   */
+  private async getUnscrapedDomains(jobId: string, minConfidence: number): Promise<DomainToScrape[]> {
+    const businesses = await prisma.business.findMany({
+      where: {
+        jobBusinesses: { some: { jobId } },
+        serpDomainConfidence: { gte: minConfidence },
+        domainEmail: null, // Not scraped yet
+        scrapeError: null, // Not failed
+      },
+      select: {
+        placeId: true,
+        name: true,
+        serpDomain: true,
+      },
+    });
+
+    return businesses.map(b => ({
+      id: b.placeId,
+      domain: b.serpDomain!,
+      businessName: b.name,
+    }));
   }
 
   /**
@@ -391,7 +537,7 @@ export class JobOrchestratorService {
   }
 
   /**
-   * Update job progress
+   * Update job progress and lastProgressAt timestamp
    */
   private async updateJobProgress(
     jobId: string,
@@ -410,7 +556,10 @@ export class JobOrchestratorService {
   ): Promise<void> {
     await prisma.job.update({
       where: { id: jobId },
-      data: updates,
+      data: {
+        ...updates,
+        lastProgressAt: new Date(), // Update stall detection timestamp
+      },
     });
   }
 
