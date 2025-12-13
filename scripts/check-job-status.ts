@@ -1,7 +1,7 @@
 import { prisma } from '../src/lib/prisma';
 
 async function checkJobStatus() {
-  const jobId = 'cmj4ephxu0001jl04hkjo03l8';
+  const jobId = 'cmj4gfplc0001jv04te9ar7wp';
 
   const job = await prisma.job.findUnique({
     where: { id: jobId },
@@ -25,6 +25,7 @@ async function checkJobStatus() {
   console.log(`Business Type: ${job.businessType}`);
   console.log(`Created: ${job.createdAt}`);
   console.log(`Updated: ${job.updatedAt}`);
+  console.log(`Last Progress: ${job.lastProgressAt}`);
   
   console.log('\n=== Progress ===');
   console.log(`Total ZIPs: ${job.totalZips}`);
@@ -57,17 +58,32 @@ async function checkJobStatus() {
     }
   });
 
-  const businessesScraped = await prisma.business.count({
+  const businessesWithScrapedEmails = await prisma.business.count({
     where: {
       jobBusinesses: { some: { jobId } },
       domainEmail: { not: null }
     }
   });
 
+  const businessesWithScrapeErrors = await prisma.business.count({
+    where: {
+      jobBusinesses: { some: { jobId } },
+      scrapeError: { not: null }
+    }
+  });
+
   console.log('\n=== Database Verification ===');
   console.log(`Total businesses in DB for this job: ${businessCount}`);
   console.log(`Businesses with domains: ${businessesWithDomains}`);
-  console.log(`Businesses with scraped emails: ${businessesScraped}`);
+  console.log(`Businesses with scraped emails: ${businessesWithScrapedEmails}`);
+  console.log(`Businesses with scrape errors: ${businessesWithScrapeErrors}`);
+  
+  // Time since last progress
+  const timeSinceProgress = Date.now() - new Date(job.lastProgressAt).getTime();
+  const minutesSinceProgress = Math.floor(timeSinceProgress / 60000);
+  console.log(`\n=== Stall Detection ===`);
+  console.log(`Minutes since last progress: ${minutesSinceProgress}`);
+  console.log(`Stalled? ${minutesSinceProgress > 2 ? 'YES' : 'NO'}`);
 }
 
 checkJobStatus()

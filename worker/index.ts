@@ -78,6 +78,9 @@ class WorkerService {
       for (const stalledJob of stalledJobs) {
         console.log(`[Worker] Job ${stalledJob.id} stalled at step "${stalledJob.currentStep}" - will resume`);
 
+        // Remove from activeJobs so it can be picked up again
+        this.activeJobs.delete(stalledJob.id);
+
         // Reset to PENDING so it will be picked up and resumed
         await prisma.job.update({
           where: { id: stalledJob.id },
