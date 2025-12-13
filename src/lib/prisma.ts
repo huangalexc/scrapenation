@@ -17,26 +17,26 @@ const isVercel = process.env.VERCEL === '1';
 export const prisma =
   globalForPrisma.prisma ??
   (() => {
-    // If DATABASE_URL is not available during build, return a mock client
-    // This prevents build failures while collecting route metadata
+    // Use a mock DATABASE_URL during build if not provided
+    const actualConnectionString = connectionString || 'postgresql://user:password@localhost:5432/db';
+
+    // Log a warning if using mock connection string
     if (!connectionString) {
-      console.warn('[Prisma] DATABASE_URL not available, using mock client for build');
-      return new PrismaClient({
-        datasources: {
-          db: {
-            url: 'postgresql://user:password@localhost:5432/db',
-          },
-        },
-      });
+      console.warn('[Prisma] DATABASE_URL not available, using mock connection for build');
     }
 
     const config: any = {
       log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+      datasources: {
+        db: {
+          url: actualConnectionString,
+        },
+      },
     };
 
     // Only use Neon adapter on Vercel (has WebSocket support) AND when DATABASE_URL is available
     // Railway will use standard Prisma client with pooled connection
-    if (isVercel) {
+    if (isVercel && connectionString) {
       config.adapter = new PrismaNeon({ connectionString });
     }
 
