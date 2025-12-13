@@ -449,7 +449,7 @@ export class DomainScraperService {
     options: ScrapingOptions = {}
   ): Promise<ScrapedDomain[]> {
     const {
-      concurrency = 10, // Scrape 10 domains at a time
+      concurrency = 3, // Scrape 3 domains at a time (reduced from 10 due to Puppeteer resource exhaustion)
       batchSize = 100,
       timeout = 5000, // 5 second timeout for HTTP requests
       usePuppeteerFallback = true, // Enable Puppeteer fallback by default
