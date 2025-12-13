@@ -1,7 +1,7 @@
 import { prisma } from '../src/lib/prisma';
 
 async function failStalledJob() {
-  const jobId = 'cmj4b6lyf0001jt04n51xiwmp';
+  const jobId = 'cmj4c3c2n0001kw04d0fhjhs6';
 
   console.log(`Marking job ${jobId} as FAILED...`);
 
@@ -10,7 +10,7 @@ async function failStalledJob() {
     where: { id: jobId },
     data: {
       status: 'FAILED',
-      errorLog: 'Job stalled during SERP enrichment (13/129 completed). Worker crashed due to DATABASE_URL missing during build. Fixed in latest deployment - please create a new job.',
+      errorLog: 'Job stalled during domain scraping (92/128 completed). Worker likely crashed during Puppeteer scraping. Puppeteer now tested and working - please create a new job.',
     },
   });
 
