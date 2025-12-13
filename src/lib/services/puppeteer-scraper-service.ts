@@ -282,10 +282,10 @@ export class PuppeteerScraperService {
     // Prioritize emails
     const bestEmail = this.selectBestEmail(cleanedEmails);
 
-    // Clean and deduplicate phones
-    const validPhones = [...new Set(allPhones)].filter((phone) =>
-      this.isValidPhone(phone)
-    );
+    // Clean, normalize, and deduplicate phones
+    const validPhones = [...new Set(allPhones)]
+      .filter((phone) => this.isValidPhone(phone))
+      .map((phone) => this.normalizePhone(phone));
 
     return {
       email: bestEmail,
@@ -298,7 +298,7 @@ export class PuppeteerScraperService {
    */
   private selectBestEmail(emails: string[]): string | null {
     if (emails.length === 0) return null;
-    if (emails.length === 1) return emails[0];
+    if (emails.length === 1) return emails[0].toLowerCase(); // Normalize to lowercase
 
     const priorities = [
       'info@',
@@ -313,10 +313,10 @@ export class PuppeteerScraperService {
 
     for (const prefix of priorities) {
       const match = emails.find((email) => email.toLowerCase().startsWith(prefix));
-      if (match) return match;
+      if (match) return match.toLowerCase(); // Normalize to lowercase
     }
 
-    return emails[0];
+    return emails[0].toLowerCase();
   }
 
   /**
@@ -331,11 +331,52 @@ export class PuppeteerScraperService {
    * Validate email address
    */
   private isValidEmail(email: string): boolean {
-    return (
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
-      !email.includes('@example.') &&
-      !email.includes('@test.')
-    );
+    // Basic email format check
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return false;
+    }
+
+    // Exclude test/example emails
+    if (email.includes('@example.') || email.includes('@test.')) {
+      return false;
+    }
+
+    // Exclude image files and assets (img-header@2x.png, slide@2x.jpg, etc.)
+    const lowerEmail = email.toLowerCase();
+    if (lowerEmail.match(/\.(png|jpg|jpeg|gif|svg|webp|ico|css|js|woff|ttf|eot)$/)) {
+      return false;
+    }
+
+    // Exclude emails that look like file paths or assets
+    if (lowerEmail.includes('img-') || lowerEmail.includes('image-') || lowerEmail.includes('slide-')) {
+      return false;
+    }
+
+    // Domain part should not contain @ (catches things like img@2x in filename)
+    const parts = email.split('@');
+    if (parts.length !== 2) {
+      return false;
+    }
+
+    const [localPart, domain] = parts;
+
+    // Local part should not be empty and should not contain file extension patterns
+    if (!localPart || localPart.match(/\d+x\.(png|jpg)/i)) {
+      return false;
+    }
+
+    // Domain should have proper TLD (at least 2 chars after last dot)
+    const domainParts = domain.split('.');
+    if (domainParts.length < 2) {
+      return false;
+    }
+
+    const tld = domainParts[domainParts.length - 1];
+    if (tld.length < 2 || tld.match(/\d+/)) { // TLD shouldn't have numbers
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -365,6 +406,29 @@ export class PuppeteerScraperService {
   private isValidPhone(phone: string): boolean {
     const digits = phone.replace(/\D/g, '');
     return digits.length >= 10 && digits.length <= 15;
+  }
+
+  /**
+   * Normalize phone number to standard format
+   * US: (XXX) XXX-XXXX or +1 (XXX) XXX-XXXX
+   * International: +XX XXXXXXXXXX
+   */
+  private normalizePhone(phone: string): string {
+    // Extract only digits
+    const digits = phone.replace(/\D/g, '');
+
+    // US phone number (10 digits or 11 with leading 1)
+    if (digits.length === 10) {
+      return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    } else if (digits.length === 11 && digits[0] === '1') {
+      return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+    } else if (digits.length > 11) {
+      // International number - keep country code and format rest
+      return `+${digits.slice(0, digits.length - 10)} ${digits.slice(-10, -7)}-${digits.slice(-7, -4)}-${digits.slice(-4)}`;
+    }
+
+    // Fallback - return as-is if doesn't match expected patterns
+    return phone;
   }
 
   /**
