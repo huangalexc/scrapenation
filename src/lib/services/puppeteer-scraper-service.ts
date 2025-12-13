@@ -49,9 +49,12 @@ export class PuppeteerScraperService {
         // Production: Use Lambda-compatible Chromium
         browser = await puppeteer.launch({
           args: chromium.args,
-          defaultViewport: chromium.defaultViewport,
+          defaultViewport: {
+            width: 1920,
+            height: 1080,
+          },
           executablePath: await chromium.executablePath(),
-          headless: chromium.headless,
+          headless: true,
         });
       } else {
         // Development: Skip Puppeteer (not configured for local use)
