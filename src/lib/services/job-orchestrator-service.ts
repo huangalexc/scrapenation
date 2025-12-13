@@ -231,7 +231,7 @@ export class JobOrchestratorService {
 
         if (domainsToScrape.length > 0) {
           // Process in smaller batches and save incrementally to avoid losing progress on stall
-          const SCRAPE_BATCH_SIZE = 25; // Save every 25 domains
+          const SCRAPE_BATCH_SIZE = 10; // Save every 10 domains (reduced from 25 due to frequent stalls)
           let totalScraped = 0;
 
           for (let i = 0; i < domainsToScrape.length; i += SCRAPE_BATCH_SIZE) {
