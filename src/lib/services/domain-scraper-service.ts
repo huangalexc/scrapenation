@@ -150,11 +150,15 @@ export class DomainScraperService {
             bestResult.phone = result.phone;
           }
         } catch (error) {
-          // If first page (home page) fails, mark domain as failed and stop trying other pages
+          // If first page (home page) fails with a persistent error, mark domain as failed
           if (path === '') {
-            firstPageFailed = true;
-            this.failedDomains.add(domain);
-            throw error; // Throw to exit and return error
+            const isPersistentError = this.isPersistentError(error);
+            if (isPersistentError) {
+              console.log(`[DomainScraper] Persistent error on ${domain} home page - marking for exclusion`);
+              firstPageFailed = true;
+              this.failedDomains.add(domain);
+              throw error; // Throw to exit and return error
+            }
           }
           // Continue to next path if this one fails
           continue;
@@ -408,6 +412,47 @@ export class DomainScraperService {
   private buildUrl(domain: string, path: string = ''): string {
     const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/$/, '');
     return `https://${cleanDomain}${path}`;
+  }
+
+  /**
+   * Check if an error is persistent (will fail on all pages)
+   */
+  private isPersistentError(error: any): boolean {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError;
+
+      // Domain not found
+      if (axiosError.code === 'ENOTFOUND') {
+        return true;
+      }
+
+      // Timeout errors
+      if (axiosError.code === 'ETIMEDOUT' || axiosError.code === 'ECONNABORTED') {
+        return true;
+      }
+
+      // Connection refused/reset
+      if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ECONNRESET') {
+        return true;
+      }
+
+      // Access denied (403, 401) - site is blocking us
+      if (axiosError.response?.status === 403 || axiosError.response?.status === 401) {
+        return true;
+      }
+
+      // 404 on home page means domain/site doesn't exist properly
+      if (axiosError.response?.status === 404) {
+        return true;
+      }
+
+      // 5xx errors often indicate misconfigured sites
+      if (axiosError.response?.status && axiosError.response.status >= 500) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
