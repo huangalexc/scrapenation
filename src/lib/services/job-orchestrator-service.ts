@@ -180,23 +180,38 @@ export class JobOrchestratorService {
         console.log(`[JobOrchestrator] ${businessesToEnrich.length} businesses need enrichment (${alreadyEnriched} already done)`);
 
         if (businessesToEnrich.length > 0) {
-          const newlyEnriched = await serpEnrichmentService.enrichBusinesses(
-            businessesToEnrich,
-            {
-              concurrency: 5,
-              batchSize: 50,
-              onProgress: (completed, total) => {
-                this.updateJobProgress(jobId, {
-                  businessesEnriched: alreadyEnriched + completed,
-                  customSearchCalls: alreadyEnriched + completed,
-                  openaiCalls: alreadyEnriched + completed,
-                });
-              },
-            }
-          );
+          // Process in smaller batches and save incrementally to avoid losing progress on stall
+          const ENRICH_BATCH_SIZE = 25; // Save every 25 businesses
+          let totalEnriched = 0;
 
-          await this.updateBusinessesWithEnrichment(newlyEnriched);
-          console.log(`[JobOrchestrator] Enriched ${newlyEnriched.length} businesses`);
+          for (let i = 0; i < businessesToEnrich.length; i += ENRICH_BATCH_SIZE) {
+            const batch = businessesToEnrich.slice(i, i + ENRICH_BATCH_SIZE);
+            console.log(`[JobOrchestrator] Enriching batch ${Math.floor(i / ENRICH_BATCH_SIZE) + 1} (${batch.length} businesses)`);
+
+            const enriched = await serpEnrichmentService.enrichBusinesses(
+              batch,
+              {
+                concurrency: 5,
+                batchSize: batch.length,
+                // Don't update progress during enrichment - only after saving to database
+                // This prevents counter from getting ahead of actual saved results
+              }
+            );
+
+            // Save results immediately after each batch
+            await this.updateBusinessesWithEnrichment(enriched);
+            totalEnriched += enriched.length;
+
+            // Update progress ONLY after successful database save
+            await this.updateJobProgress(jobId, {
+              businessesEnriched: alreadyEnriched + totalEnriched,
+              customSearchCalls: alreadyEnriched + totalEnriched,
+              openaiCalls: alreadyEnriched + totalEnriched,
+            });
+            console.log(`[JobOrchestrator] Saved batch ${Math.floor(i / ENRICH_BATCH_SIZE) + 1} - Total enriched: ${totalEnriched}/${businessesToEnrich.length}`);
+          }
+
+          console.log(`[JobOrchestrator] Completed all enrichment - ${totalEnriched} businesses`);
         }
 
         // Load all enriched businesses
