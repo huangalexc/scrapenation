@@ -145,13 +145,19 @@ export class JobOrchestratorService {
           })),
           config.businessType,
           (completed, total) => {
-            this.updateJobProgress(jobId, { zipsProcessed: completed });
+            this.updateJobProgress(jobId, {
+              zipsProcessed: completed,
+              placesApiCalls: completed, // Track Places API calls
+            });
           }
         );
 
         console.log(`[JobOrchestrator] Found ${places.length} unique businesses`);
         await this.saveBusinesses(jobId, places);
-        await this.updateJobProgress(jobId, { businessesFound: places.length });
+        await this.updateJobProgress(jobId, {
+          businessesFound: places.length,
+          placesApiCalls: zipCodes.length, // Final count
+        });
       } else {
         console.log(`[JobOrchestrator] Step 2: Skipping Places search (already completed)`);
         // Load existing businesses from database

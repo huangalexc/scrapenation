@@ -60,9 +60,23 @@ export function JobDetailClient({ initialJob }: JobDetailClientProps) {
     return () => clearInterval(pollInterval);
   }, [job.id, isPolling]);
 
-  const progressPercent = job.totalZips > 0
+  // Calculate progress for each pipeline step
+  const placesProgress = job.totalZips > 0
     ? Math.round((job.zipsProcessed / job.totalZips) * 100)
     : 0;
+
+  const enrichmentProgress = job.businessesFound > 0
+    ? Math.round((job.businessesEnriched / job.businessesFound) * 100)
+    : 0;
+
+  const scrapingProgress = job.businessesEnriched > 0
+    ? Math.round((job.businessesScraped / job.businessesEnriched) * 100)
+    : 0;
+
+  // Overall progress based on completed steps
+  const overallProgress = Math.round(
+    (placesProgress * 0.3 + enrichmentProgress * 0.4 + scrapingProgress * 0.3)
+  );
 
   return (
     <div className="container mx-auto py-8">
@@ -107,35 +121,69 @@ export function JobDetailClient({ initialJob }: JobDetailClientProps) {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Overall Progress</span>
-                    <span className="text-2xl font-bold">{progressPercent}%</span>
+                <div className="space-y-6">
+                  {/* Overall Progress */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Overall Progress</span>
+                      <span className="text-2xl font-bold">{overallProgress}%</span>
+                    </div>
+                    <div className="w-full bg-secondary rounded-full h-3">
+                      <div
+                        className="bg-primary h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${overallProgress}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="w-full bg-secondary rounded-full h-3">
-                    <div
-                      className="bg-primary h-3 rounded-full transition-all duration-500"
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  </div>
-                  <div className="grid grid-cols-4 gap-4 pt-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground">ZIP Codes</p>
-                      <p className="text-xl font-semibold">
-                        {job.zipsProcessed}/{job.totalZips}
-                      </p>
+
+                  {/* Pipeline Step Progress Bars */}
+                  <div className="space-y-4 pt-4 border-t">
+                    {/* Places Search Progress */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          1. Places Search ({job.zipsProcessed}/{job.totalZips} ZIPs)
+                        </span>
+                        <span className="font-medium">{placesProgress}%</span>
+                      </div>
+                      <div className="w-full bg-secondary rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${placesProgress}%` }}
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Businesses Found</p>
-                      <p className="text-xl font-semibold">{job.businessesFound}</p>
+
+                    {/* Enrichment Progress */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          2. SERP Enrichment ({job.businessesEnriched}/{job.businessesFound} businesses)
+                        </span>
+                        <span className="font-medium">{enrichmentProgress}%</span>
+                      </div>
+                      <div className="w-full bg-secondary rounded-full h-2">
+                        <div
+                          className="bg-purple-500 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${enrichmentProgress}%` }}
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Enriched</p>
-                      <p className="text-xl font-semibold">{job.businessesEnriched}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Scraped</p>
-                      <p className="text-xl font-semibold">{job.businessesScraped}</p>
+
+                    {/* Scraping Progress */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          3. Domain Scraping ({job.businessesScraped}/{job.businessesEnriched} domains)
+                        </span>
+                        <span className="font-medium">{scrapingProgress}%</span>
+                      </div>
+                      <div className="w-full bg-secondary rounded-full h-2">
+                        <div
+                          className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${scrapingProgress}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
