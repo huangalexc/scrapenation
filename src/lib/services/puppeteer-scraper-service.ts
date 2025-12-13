@@ -117,11 +117,18 @@ export class PuppeteerScraperService {
   }
 
   /**
-   * Launch browser with retry logic to handle ETXTBSY errors on Railway
+   * Launch browser with retry logic to handle resource exhaustion on Railway
    */
   private async launchBrowserWithRetry(maxRetries = 3): Promise<any> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
+        // Add delay between attempts to stagger browser launches
+        if (attempt > 1) {
+          const waitTime = attempt * 1000; // 1s, 2s, 3s
+          console.log(`[PuppeteerScraper] Waiting ${waitTime}ms before retry attempt ${attempt}/${maxRetries}...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+
         if (isProduction) {
           // Production: Use Lambda-compatible Chromium
           return await puppeteer.launch({
@@ -148,17 +155,14 @@ export class PuppeteerScraperService {
       } catch (error) {
         const errorMessage = (error as Error).message;
 
-        // Check if it's an ETXTBSY error (file busy)
-        if (errorMessage.includes('ETXTBSY') || errorMessage.includes('spawn')) {
-          if (attempt < maxRetries) {
-            const waitTime = attempt * 500; // Exponential backoff: 500ms, 1000ms, 1500ms
-            console.log(`[PuppeteerScraper] Browser launch failed (attempt ${attempt}/${maxRetries}), retrying in ${waitTime}ms...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-            continue;
-          }
+        console.log(`[PuppeteerScraper] Browser launch failed (attempt ${attempt}/${maxRetries}): ${errorMessage}`);
+
+        // Retry on ANY launch failure if we have retries left
+        if (attempt < maxRetries) {
+          continue;
         }
 
-        // If not ETXTBSY or max retries reached, throw the error
+        // Max retries reached, throw the error
         throw error;
       }
     }

@@ -231,7 +231,7 @@ export class JobOrchestratorService {
             console.log(`[JobOrchestrator] Scraping batch ${Math.floor(i / SCRAPE_BATCH_SIZE) + 1} (${batch.length} domains)`);
 
             const scraped = await domainScraperService.scrapeDomains(batch, {
-              concurrency: 10,
+              concurrency: 5, // Reduced from 10 to 5 to prevent Puppeteer resource exhaustion
               batchSize: batch.length,
               onProgress: (completed, total) => {
                 // Use actual count from database, not stale job.businessesScraped
