@@ -241,15 +241,16 @@ export class JobOrchestratorService {
             const scraped = await domainScraperService.scrapeDomains(batch, {
               concurrency: 3, // Reduced from 5 to 3 to prevent Puppeteer resource exhaustion
               batchSize: batch.length,
-              onProgress: (completed, total) => {
-                // Use actual count from database, not stale job.businessesScraped
-                this.updateJobProgress(jobId, { businessesScraped: alreadyScraped + totalScraped + completed });
-              },
+              // Don't update progress during scraping - only after saving to database
+              // This prevents counter from getting ahead of actual saved results
             });
 
             // Save results immediately after each batch
             await this.updateBusinessesWithScraping(scraped);
             totalScraped += scraped.length;
+
+            // Update progress ONLY after successful database save
+            await this.updateJobProgress(jobId, { businessesScraped: alreadyScraped + totalScraped });
             console.log(`[JobOrchestrator] Saved batch ${Math.floor(i / SCRAPE_BATCH_SIZE) + 1} - Total scraped: ${totalScraped}/${domainsToScrape.length}`);
           }
 
