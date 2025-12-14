@@ -416,6 +416,11 @@ export class DomainScraperService {
 
     const [localPart, domain] = parts;
 
+    // Exclude MD5-like hashes (32 hex chars) or other long hex strings
+    if (localPart.match(/^[a-f0-9]{20,}$/i)) {
+      return false;
+    }
+
     // Local part should not be empty and should not contain file extension patterns
     if (!localPart || localPart.match(/\d+x\.(png|jpg)/i)) {
       return false;
@@ -596,7 +601,7 @@ export class DomainScraperService {
     options: ScrapingOptions = {}
   ): Promise<ScrapedDomain[]> {
     const {
-      concurrency = 3, // 3 concurrent pages in shared browser (browser reuse pattern)
+      concurrency = 5, // 5 concurrent pages in shared browser (browser reuse pattern)
       batchSize = 100,
       timeout = 5000, // 5 second timeout for HTTP requests
       usePuppeteerFallback = true, // Enable Puppeteer fallback by default

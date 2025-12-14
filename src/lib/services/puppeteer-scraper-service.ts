@@ -419,6 +419,11 @@ export class PuppeteerScraperService {
 
     const [localPart, domain] = parts;
 
+    // Exclude MD5-like hashes (32 hex chars) or other long hex strings
+    if (localPart.match(/^[a-f0-9]{20,}$/i)) {
+      return false;
+    }
+
     // Local part should not be empty and should not contain file extension patterns
     if (!localPart || localPart.match(/\d+x\.(png|jpg)/i)) {
       return false;
