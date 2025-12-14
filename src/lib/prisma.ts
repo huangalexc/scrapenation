@@ -27,17 +27,20 @@ export const prisma =
 
     const config: any = {
       log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-      datasources: {
-        db: {
-          url: actualConnectionString,
-        },
-      },
     };
 
     // Only use Neon adapter on Vercel (has WebSocket support) AND when DATABASE_URL is available
     // Railway will use standard Prisma client with pooled connection
     if (isVercel && connectionString) {
+      // When using adapter, connection string is passed to adapter, not datasources
       config.adapter = new PrismaNeon({ connectionString });
+    } else {
+      // Standard Prisma client (Railway) or build-time - use datasources
+      config.datasources = {
+        db: {
+          url: actualConnectionString,
+        },
+      };
     }
 
     return new PrismaClient(config);
