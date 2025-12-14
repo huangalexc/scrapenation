@@ -670,7 +670,11 @@ export class JobOrchestratorService {
     // Pricing based on actual API rates
     const PLACES_COST_PER_CALL = 0.032; // $32 per 1000 requests (Google Places API)
     const DATAFORSEO_COST_PER_CALL = 0.0006; // $0.0006 per page (DataForSEO Google Organic SERP)
-    const OPENAI_COST_PER_CALL = 0.001; // Approximate for gpt-4o-mini
+
+    // gpt-4o-mini: $0.15/1M input tokens, $0.60/1M output tokens
+    // Estimated ~690 input tokens + ~50 output tokens per call
+    // (690 × $0.15/1M) + (50 × $0.60/1M) = $0.0001035 + $0.00003 = ~$0.00013
+    const OPENAI_COST_PER_CALL = 0.00013;
 
     return (
       calls.placesApiCalls * PLACES_COST_PER_CALL +
