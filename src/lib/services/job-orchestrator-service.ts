@@ -667,14 +667,14 @@ export class JobOrchestratorService {
     customSearchCalls: number;
     openaiCalls: number;
   }): number {
-    // Pricing estimates (adjust based on actual rates)
-    const PLACES_COST_PER_CALL = 0.032; // $32 per 1000 requests
-    const CUSTOM_SEARCH_COST_PER_CALL = 0.005; // $5 per 1000 queries
+    // Pricing based on actual API rates
+    const PLACES_COST_PER_CALL = 0.032; // $32 per 1000 requests (Google Places API)
+    const DATAFORSEO_COST_PER_CALL = 0.0006; // $0.0006 per page (DataForSEO Google Organic SERP)
     const OPENAI_COST_PER_CALL = 0.001; // Approximate for gpt-4o-mini
 
     return (
       calls.placesApiCalls * PLACES_COST_PER_CALL +
-      calls.customSearchCalls * CUSTOM_SEARCH_COST_PER_CALL +
+      calls.customSearchCalls * DATAFORSEO_COST_PER_CALL +
       calls.openaiCalls * OPENAI_COST_PER_CALL
     );
   }
