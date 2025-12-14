@@ -470,33 +470,44 @@ export class PuppeteerScraperService {
   }
 
   /**
-   * Validate phone number
+   * Validate phone number (US numbers only)
    */
   private isValidPhone(phone: string): boolean {
+    // Remove all formatting
     const digits = phone.replace(/\D/g, '');
-    return digits.length >= 10 && digits.length <= 15;
+
+    // Must be exactly 10 digits (US) or 11 digits starting with 1 (US with country code)
+    if (digits.length === 10) {
+      // First digit can't be 0 or 1 (valid US area codes)
+      return digits[0] >= '2' && digits[0] <= '9';
+    } else if (digits.length === 11 && digits[0] === '1') {
+      // Country code 1, area code can't start with 0 or 1
+      return digits[1] >= '2' && digits[1] <= '9';
+    }
+
+    // Reject everything else (wrong length or invalid country code)
+    return false;
   }
 
   /**
-   * Normalize phone number to standard format
-   * US: (XXX) XXX-XXXX or +1 (XXX) XXX-XXXX
-   * International: +XX XXXXXXXXXX
+   * Normalize phone number to standard US format
+   * Output: (XXX) XXX-XXXX
    */
   private normalizePhone(phone: string): string {
     // Extract only digits
     const digits = phone.replace(/\D/g, '');
 
-    // US phone number (10 digits or 11 with leading 1)
+    // US phone number with 10 digits
     if (digits.length === 10) {
       return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-    } else if (digits.length === 11 && digits[0] === '1') {
-      return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-    } else if (digits.length > 11) {
-      // International number - keep country code and format rest
-      return `+${digits.slice(0, digits.length - 10)} ${digits.slice(-10, -7)}-${digits.slice(-7, -4)}-${digits.slice(-4)}`;
     }
 
-    // Fallback - return as-is if doesn't match expected patterns
+    // US phone number with country code (11 digits starting with 1)
+    if (digits.length === 11 && digits[0] === '1') {
+      return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+    }
+
+    // Should never reach here due to isValidPhone check, but just in case
     return phone;
   }
 

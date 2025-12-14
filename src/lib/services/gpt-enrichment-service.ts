@@ -195,12 +195,34 @@ Important:
   }
 
   /**
-   * Sanitize phone number
+   * Sanitize and normalize phone number (US only)
    */
   private sanitizePhone(phone: any): string | null {
     if (!phone || typeof phone !== 'string') return null;
 
-    return phone.trim() || null;
+    // Extract only digits
+    const digits = phone.replace(/\D/g, '');
+
+    // Validate US phone number
+    let isValid = false;
+    if (digits.length === 10) {
+      // First digit can't be 0 or 1 (valid US area codes)
+      isValid = digits[0] >= '2' && digits[0] <= '9';
+    } else if (digits.length === 11 && digits[0] === '1') {
+      // Country code 1, area code can't start with 0 or 1
+      isValid = digits[1] >= '2' && digits[1] <= '9';
+    }
+
+    if (!isValid) return null;
+
+    // Normalize to (XXX) XXX-XXXX format
+    if (digits.length === 10) {
+      return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    } else if (digits.length === 11 && digits[0] === '1') {
+      return `(${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+    }
+
+    return null;
   }
 
   /**
