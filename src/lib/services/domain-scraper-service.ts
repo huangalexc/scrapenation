@@ -601,7 +601,7 @@ export class DomainScraperService {
     options: ScrapingOptions = {}
   ): Promise<ScrapedDomain[]> {
     const {
-      concurrency = 5, // 5 concurrent pages in shared browser (browser reuse pattern)
+      concurrency = 5, // 5 concurrent pages in shared browser
       batchSize = 100,
       timeout = 5000, // 5 second timeout for HTTP requests
       usePuppeteerFallback = true, // Enable Puppeteer fallback by default
