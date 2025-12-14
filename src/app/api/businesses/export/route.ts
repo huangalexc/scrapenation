@@ -96,8 +96,25 @@ function generateCSV(businesses: any[]): string {
     'Formatted Address',
   ];
 
+  // Deduplicate by unique (Email, Phone) combination - keep first occurrence
+  const seen = new Set<string>();
+  const deduplicatedBusinesses = businesses.filter((b) => {
+    const email = b.domainEmail || b.serpEmail || '';
+    const phone = b.domainPhone || b.serpPhone || '';
+    const key = `${email}|${phone}`;
+
+    // Skip if we've seen this (email, phone) combination before
+    if (seen.has(key)) {
+      return false;
+    }
+
+    // Keep this business and mark combination as seen
+    seen.add(key);
+    return true;
+  });
+
   // CSV rows - use coalesce logic (domain first, fallback to SERP)
-  const rows = businesses.map((b) => [
+  const rows = deduplicatedBusinesses.map((b) => [
     escapeCsvField(b.name),
     escapeCsvField(b.city || ''),
     escapeCsvField(b.state || ''),
