@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth/auth';
 import { prisma } from '@/lib/prisma';
-import { businessFilterSchema } from '@/lib/schemas/job-schemas';
 
 // Force dynamic rendering - don't prerender during build
 export const dynamic = 'force-dynamic';
@@ -16,20 +15,15 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
 
-    // Parse query parameters
-    const params: any = {
-      page: 1,
-      pageSize: 100000, // Get all for export
+    // Parse query parameters (no schema validation for export - we need unlimited pageSize)
+    const filters = {
+      state: searchParams.get('state') || undefined,
+      businessType: searchParams.get('businessType') || undefined,
+      hasEmail: searchParams.get('hasEmail') === 'true' ? true : undefined,
+      hasPhone: searchParams.get('hasPhone') === 'true' ? true : undefined,
+      sortBy: (searchParams.get('sortBy') as any) || 'name',
+      sortOrder: (searchParams.get('sortOrder') as any) || 'asc',
     };
-
-    if (searchParams.get('state')) params.state = searchParams.get('state');
-    if (searchParams.get('businessType')) params.businessType = searchParams.get('businessType');
-    if (searchParams.get('hasEmail')) params.hasEmail = searchParams.get('hasEmail') === 'true';
-    if (searchParams.get('hasPhone')) params.hasPhone = searchParams.get('hasPhone') === 'true';
-    if (searchParams.get('sortBy')) params.sortBy = searchParams.get('sortBy');
-    if (searchParams.get('sortOrder')) params.sortOrder = searchParams.get('sortOrder');
-
-    const filters = businessFilterSchema.parse(params);
 
     // Build where clause - filter by user access via UserBusiness junction table
     const where: any = {
