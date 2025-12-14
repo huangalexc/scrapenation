@@ -12,8 +12,9 @@ export interface PuppeteerScrapingResult {
 }
 
 export class PuppeteerScraperService {
+  // Email regex with proper boundaries to avoid capturing surrounding text
   private readonly EMAIL_REGEX =
-    /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}/g;
+    /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![A-Za-z0-9._%+-])/gi;
   private readonly PHONE_REGEX =
     /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
 
@@ -394,11 +395,25 @@ export class PuppeteerScraperService {
   }
 
   /**
-   * Clean up extracted email
+   * Clean up extracted email by removing leading/trailing non-email characters
    */
   private cleanEmail(email: string): string {
-    const match = email.match(/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
-    return match ? match[0] : email;
+    // First, decode URL-encoded characters like %20 (space)
+    let cleaned = email;
+    try {
+      cleaned = decodeURIComponent(email);
+    } catch {
+      // If decoding fails, use original
+    }
+
+    // Remove leading/trailing non-email characters and extract just the email
+    const match = cleaned.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    if (!match) return email;
+
+    const extractedEmail = match[0];
+
+    // Remove spaces that might be in the middle of the email
+    return extractedEmail.replace(/\s+/g, '');
   }
 
   /**
@@ -484,6 +499,10 @@ export class PuppeteerScraperService {
       'yourname@',
       'user@',
       'username@',
+      '@godaddy.com', // GoDaddy placeholder emails
+      'filler@',
+      'placeholder@',
+      'dummy@',
     ];
 
     return genericPatterns.some((pattern) => lowerEmail.includes(pattern));

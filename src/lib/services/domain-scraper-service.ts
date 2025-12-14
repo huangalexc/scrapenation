@@ -17,9 +17,10 @@ export interface ScrapingOptions {
 }
 
 export class DomainScraperService {
-  // Remove word boundaries to handle emails in concatenated text
+  // Email regex with proper boundaries to avoid capturing surrounding text
+  // Use negative lookbehind/lookahead to ensure we don't capture partial words
   private readonly EMAIL_REGEX =
-    /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}/g;
+    /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![A-Za-z0-9._%+-])/gi;
   private readonly PHONE_REGEX =
     /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
 
@@ -374,13 +375,30 @@ export class DomainScraperService {
   }
 
   /**
-   * Clean up extracted email by removing trailing non-email characters
+   * Clean up extracted email by removing leading/trailing non-email characters
    */
   private cleanEmail(email: string): string {
-    // Remove common trailing characters that get captured (Opening, Hours, etc.)
-    // Match only the valid email part
-    const match = email.match(/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
-    return match ? match[0] : email;
+    // First, decode URL-encoded characters like %20 (space)
+    let cleaned = email;
+    try {
+      cleaned = decodeURIComponent(email);
+    } catch {
+      // If decoding fails, use original
+    }
+
+    // Remove leading/trailing non-email characters and extract just the email
+    // This handles cases like:
+    // - "phone@example.com" -> should be  removed
+    // - "704-568-2447admin@chirobryan.com" -> "admin@chirobryan.com"
+    // - "info@example.comcall" -> "info@example.com"
+    const match = cleaned.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    if (!match) return email;
+
+    const extractedEmail = match[0];
+
+    // Remove spaces that might be in the middle of the email
+    // e.g., "naylorclinic@be llsouth.net" -> "naylorclinic@bellsouth.net"
+    return extractedEmail.replace(/\s+/g, '');
   }
 
   /**
@@ -466,6 +484,10 @@ export class DomainScraperService {
       'yourname@',
       'user@',
       'username@',
+      '@godaddy.com', // GoDaddy placeholder emails
+      'filler@',
+      'placeholder@',
+      'dummy@',
     ];
 
     return genericPatterns.some((pattern) => lowerEmail.includes(pattern));
