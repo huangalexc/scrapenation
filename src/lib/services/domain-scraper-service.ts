@@ -291,18 +291,18 @@ export class DomainScraperService {
       }
     });
 
-    // 4. Extract phone numbers from tel: links
+    // 4. Extract phone numbers from tel: links (MOST RELIABLE)
+    const telPhones: string[] = [];
     $('a[href^="tel:"]').each((_, elem) => {
       const href = $(elem).attr('href');
       if (href) {
         const phone = href.replace('tel:', '').trim();
-        allPhones.push(phone);
+        telPhones.push(phone);
       }
     });
 
-    // 5. Extract phone numbers from visible text
+    // 5. Extract phone numbers from visible text (LESS RELIABLE - use as fallback)
     const textPhones = text.match(this.PHONE_REGEX) || [];
-    allPhones.push(...textPhones);
 
     // Clean and deduplicate emails
     const cleanedEmails = [...new Set(allEmails)]
@@ -313,14 +313,24 @@ export class DomainScraperService {
     // Prioritize emails: info@ and contact@ first, then others
     const bestEmail = this.selectBestEmail(cleanedEmails);
 
-    // Clean, normalize, and deduplicate phones
-    const validPhones = [...new Set(allPhones)]
+    // Prioritize tel: link phones over text-extracted phones
+    // Clean and validate tel: phones first
+    const validTelPhones = [...new Set(telPhones)]
       .filter((phone) => this.isValidPhone(phone))
       .map((phone) => this.normalizePhone(phone));
 
+    // Only use text phones if no tel: links found
+    let bestPhone = validTelPhones[0] || null;
+    if (!bestPhone) {
+      const validTextPhones = [...new Set(textPhones)]
+        .filter((phone) => this.isValidPhone(phone))
+        .map((phone) => this.normalizePhone(phone));
+      bestPhone = validTextPhones[0] || null;
+    }
+
     return {
       email: bestEmail,
-      phone: validPhones[0] || null,
+      phone: bestPhone,
     };
   }
 
@@ -422,7 +432,7 @@ export class DomainScraperService {
   private isGenericEmail(email: string): boolean {
     const lowerEmail = email.toLowerCase();
 
-    // Only filter out truly generic/automated emails
+    // Filter out truly generic/automated/dummy emails
     const genericPatterns = [
       'noreply',
       'no-reply',
@@ -433,6 +443,15 @@ export class DomainScraperService {
       'support@example',
       'info@example',
       'contact@example',
+      'user@domain.com',
+      'admin@domain.com',
+      'email@domain.com',
+      'name@domain.com',
+      'your@domain.com',
+      'youremail@',
+      'yourname@',
+      'user@',
+      'username@',
     ];
 
     return genericPatterns.some((pattern) => lowerEmail.includes(pattern));

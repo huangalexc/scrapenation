@@ -312,15 +312,15 @@ export class PuppeteerScraperService {
     const textEmails = html.match(this.EMAIL_REGEX) || [];
     allEmails.push(...textEmails);
 
-    // Extract phone numbers from tel: links
+    // Extract phone numbers from tel: links (MOST RELIABLE)
+    const telPhones: string[] = [];
     const telMatches = html.matchAll(/tel:([^"'\s]+)/gi);
     for (const match of telMatches) {
-      allPhones.push(match[1]);
+      telPhones.push(match[1]);
     }
 
-    // Extract phone numbers from text
+    // Extract phone numbers from text (LESS RELIABLE - use as fallback)
     const textPhones = html.match(this.PHONE_REGEX) || [];
-    allPhones.push(...textPhones);
 
     // Clean and deduplicate emails
     const cleanedEmails = [...new Set(allEmails)]
@@ -331,14 +331,24 @@ export class PuppeteerScraperService {
     // Prioritize emails
     const bestEmail = this.selectBestEmail(cleanedEmails);
 
-    // Clean, normalize, and deduplicate phones
-    const validPhones = [...new Set(allPhones)]
+    // Prioritize tel: link phones over text-extracted phones
+    // Clean and validate tel: phones first
+    const validTelPhones = [...new Set(telPhones)]
       .filter((phone) => this.isValidPhone(phone))
       .map((phone) => this.normalizePhone(phone));
 
+    // Only use text phones if no tel: links found
+    let bestPhone = validTelPhones[0] || null;
+    if (!bestPhone) {
+      const validTextPhones = [...new Set(textPhones)]
+        .filter((phone) => this.isValidPhone(phone))
+        .map((phone) => this.normalizePhone(phone));
+      bestPhone = validTextPhones[0] || null;
+    }
+
     return {
       email: bestEmail,
-      phone: validPhones[0] || null,
+      phone: bestPhone,
     };
   }
 
@@ -434,6 +444,7 @@ export class PuppeteerScraperService {
   private isGenericEmail(email: string): boolean {
     const lowerEmail = email.toLowerCase();
 
+    // Filter out truly generic/automated/dummy emails
     const genericPatterns = [
       'noreply',
       'no-reply',
@@ -444,6 +455,15 @@ export class PuppeteerScraperService {
       'support@example',
       'info@example',
       'contact@example',
+      'user@domain.com',
+      'admin@domain.com',
+      'email@domain.com',
+      'name@domain.com',
+      'your@domain.com',
+      'youremail@',
+      'yourname@',
+      'user@',
+      'username@',
     ];
 
     return genericPatterns.some((pattern) => lowerEmail.includes(pattern));
