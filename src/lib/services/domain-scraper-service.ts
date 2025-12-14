@@ -170,7 +170,7 @@ export class DomainScraperService {
       if (usePuppeteerFallback && !bestResult.email) {
         console.log(`[DomainScraper] Cheerio found no email for ${domain}, trying Puppeteer...`);
         try {
-          const puppeteerResult = await puppeteerScraperService.scrapeDomain(domain, { timeout: 10000 });
+          const puppeteerResult = await puppeteerScraperService.scrapeDomain(domain, { timeout: 3000 });
           if (puppeteerResult.email) {
             console.log(`[DomainScraper] ✅ Puppeteer found email for ${domain}: ${puppeteerResult.email}`);
             // Combine Puppeteer email with Cheerio phone if we have it
@@ -200,11 +200,18 @@ export class DomainScraperService {
       const errorMessage = this.classifyError(error);
       logError(error as Error, { domain });
 
-      // Try Puppeteer fallback if enabled and Cheerio had an error
-      if (usePuppeteerFallback) {
+      // Try Puppeteer fallback if enabled and error is not persistent
+      // Skip Puppeteer for timeouts and 403s - they'll fail the same way
+      const shouldSkipPuppeteer =
+        errorMessage === 'TIMEOUT' ||
+        errorMessage === 'ACCESS_DENIED' ||
+        errorMessage === 'DOMAIN_NOT_FOUND' ||
+        errorMessage === 'SERVER_ERROR';
+
+      if (usePuppeteerFallback && !shouldSkipPuppeteer) {
         console.log(`[DomainScraper] Cheerio error for ${domain}, trying Puppeteer fallback...`);
         try {
-          const puppeteerResult = await puppeteerScraperService.scrapeDomain(domain, { timeout: 10000 });
+          const puppeteerResult = await puppeteerScraperService.scrapeDomain(domain, { timeout: 3000 });
           if (puppeteerResult.email || puppeteerResult.phone) {
             console.log(`[DomainScraper] Puppeteer recovered from Cheerio error for ${domain}`);
             return puppeteerResult;
@@ -213,6 +220,8 @@ export class DomainScraperService {
           console.log(`[DomainScraper] Puppeteer also failed for ${domain}`);
           // Fall through to return original error
         }
+      } else if (shouldSkipPuppeteer) {
+        console.log(`[DomainScraper] Skipping Puppeteer for ${domain} - persistent error: ${errorMessage}`);
       }
 
       return {
