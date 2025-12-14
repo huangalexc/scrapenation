@@ -61,8 +61,23 @@ export class PuppeteerScraperService {
   async closeSharedBrowser() {
     if (this.sharedBrowser) {
       console.log(`[PuppeteerScraper] Closing shared browser instance...`);
-      await this.sharedBrowser.close().catch(() => {});
+      try {
+        await this.sharedBrowser.close();
+      } catch (error) {
+        console.log(`[PuppeteerScraper] Error closing browser, will force kill:`, (error as Error).message);
+      }
       this.sharedBrowser = null;
+
+      // Force kill any remaining Chrome processes to prevent zombie processes
+      if (process.platform !== 'win32') {
+        try {
+          const { execSync } = require('child_process');
+          execSync('pkill -9 -f "chrome|chromium"', { stdio: 'ignore' });
+          console.log(`[PuppeteerScraper] Forcefully killed any remaining Chrome processes`);
+        } catch (killError) {
+          // Ignore errors - processes might already be dead
+        }
+      }
     }
   }
 
