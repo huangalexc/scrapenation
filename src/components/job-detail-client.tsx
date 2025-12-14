@@ -21,6 +21,9 @@ interface Job {
   customSearchCalls: number;
   openaiCalls: number;
   estimatedCost: number;
+  placesSearchTime: number | null;
+  enrichmentTime: number | null;
+  scrapingTime: number | null;
   errorsEncountered: number;
   errorLog: string | null;
   createdAt: string;
@@ -29,6 +32,18 @@ interface Job {
 
 interface JobDetailClientProps {
   initialJob: Job;
+}
+
+// Helper function to format time in seconds to human-readable format
+function formatTime(seconds: number | null): string {
+  if (seconds === null) return '-';
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
 }
 
 export function JobDetailClient({ initialJob }: JobDetailClientProps) {
@@ -143,6 +158,9 @@ export function JobDetailClient({ initialJob }: JobDetailClientProps) {
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">
                           1. Places Search ({job.zipsProcessed}/{job.totalZips} ZIPs)
+                          {job.placesSearchTime && (
+                            <span className="ml-2 text-xs text-primary">({formatTime(job.placesSearchTime)})</span>
+                          )}
                         </span>
                         <span className="font-medium">{placesProgress}%</span>
                       </div>
@@ -159,6 +177,9 @@ export function JobDetailClient({ initialJob }: JobDetailClientProps) {
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">
                           2. SERP Enrichment ({job.businessesEnriched}/{job.businessesFound} businesses)
+                          {job.enrichmentTime && (
+                            <span className="ml-2 text-xs text-primary">({formatTime(job.enrichmentTime)})</span>
+                          )}
                         </span>
                         <span className="font-medium">{enrichmentProgress}%</span>
                       </div>
@@ -175,6 +196,9 @@ export function JobDetailClient({ initialJob }: JobDetailClientProps) {
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">
                           3. Domain Scraping ({job.businessesScraped}/{job.businessesEnriched} domains)
+                          {job.scrapingTime && (
+                            <span className="ml-2 text-xs text-primary">({formatTime(job.scrapingTime)})</span>
+                          )}
                         </span>
                         <span className="font-medium">{scrapingProgress}%</span>
                       </div>

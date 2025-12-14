@@ -134,6 +134,7 @@ export class JobOrchestratorService {
           zipCodes = await this.selectZipCodes(config);
         }
 
+        const placesStartTime = Date.now();
         places = await placesService.searchMultipleLocations(
           zipCodes.map((zip) => ({
             zipCode: zip.zipCode,
@@ -151,10 +152,14 @@ export class JobOrchestratorService {
             });
           }
         );
+        const placesTimeSeconds = Math.round((Date.now() - placesStartTime) / 1000);
 
-        console.log(`[JobOrchestrator] Found ${places.length} unique businesses`);
+        console.log(`[JobOrchestrator] Found ${places.length} unique businesses in ${placesTimeSeconds}s`);
         await this.saveBusinesses(jobId, places);
-        await this.updateJobProgress(jobId, { businessesFound: places.length });
+        await this.updateJobProgress(jobId, {
+          businessesFound: places.length,
+          placesSearchTime: placesTimeSeconds,
+        });
       } else {
         console.log(`[JobOrchestrator] Step 2: Skipping Places search (already completed)`);
         // Load existing businesses from database
@@ -179,6 +184,7 @@ export class JobOrchestratorService {
         const businessesToEnrich = await this.getUnenrichedBusinesses(jobId);
         console.log(`[JobOrchestrator] ${businessesToEnrich.length} businesses need enrichment (${alreadyEnriched} already done)`);
 
+        const enrichmentStartTime = Date.now();
         if (businessesToEnrich.length > 0) {
           // Process in smaller batches and save incrementally to avoid losing progress on stall
           const ENRICH_BATCH_SIZE = 25; // Save every 25 businesses
@@ -213,9 +219,12 @@ export class JobOrchestratorService {
 
           console.log(`[JobOrchestrator] Completed all enrichment - ${totalEnriched} businesses`);
         }
+        const enrichmentTimeSeconds = Math.round((Date.now() - enrichmentStartTime) / 1000);
 
         // Load all enriched businesses
         enriched = await this.loadEnrichedBusinesses(jobId);
+        await this.updateJobProgress(jobId, { enrichmentTime: enrichmentTimeSeconds });
+        console.log(`[JobOrchestrator] Enrichment completed in ${enrichmentTimeSeconds}s`);
       } else {
         console.log(`[JobOrchestrator] Step 3: Skipping enrichment (already completed)`);
         enriched = await this.loadEnrichedBusinesses(jobId);
@@ -244,6 +253,7 @@ export class JobOrchestratorService {
         const domainsToScrape = await this.getUnscrapedDomains(jobId, minConfidence);
         console.log(`[JobOrchestrator] ${domainsToScrape.length} domains need scraping (${alreadyScraped} already done)`);
 
+        const scrapingStartTime = Date.now();
         if (domainsToScrape.length > 0) {
           // Process in smaller batches and save incrementally to avoid losing progress on stall
           const SCRAPE_BATCH_SIZE = 5; // Save every 5 domains (reduced from 10 due to continued stalls)
@@ -290,6 +300,9 @@ export class JobOrchestratorService {
           });
           console.log(`[JobOrchestrator] Completed all scraping - ${finalScraped} domains`);
         }
+        const scrapingTimeSeconds = Math.round((Date.now() - scrapingStartTime) / 1000);
+        await this.updateJobProgress(jobId, { scrapingTime: scrapingTimeSeconds });
+        console.log(`[JobOrchestrator] Scraping completed in ${scrapingTimeSeconds}s`);
       } else {
         console.log(`[JobOrchestrator] Step 4: Skipping domain scraping (already completed)`);
       }
@@ -635,6 +648,9 @@ export class JobOrchestratorService {
       customSearchCalls?: number;
       openaiCalls?: number;
       estimatedCost?: number;
+      placesSearchTime?: number;
+      enrichmentTime?: number;
+      scrapingTime?: number;
     }
   ): Promise<void> {
     await prisma.job.update({

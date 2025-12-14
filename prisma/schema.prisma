@@ -99,6 +99,11 @@ model Job {
   openaiCalls         Int @default(0) @map("openai_calls")
   estimatedCost       Float @default(0) @map("estimated_cost")
 
+  // Timing tracking (in seconds)
+  placesSearchTime    Int? @map("places_search_time")    // Time spent on Places Search
+  enrichmentTime      Int? @map("enrichment_time")       // Time spent on SERP Enrichment
+  scrapingTime        Int? @map("scraping_time")         // Time spent on Domain Scraping
+
   // Error logs
   errorLog String? @map("error_log") @db.Text
 
