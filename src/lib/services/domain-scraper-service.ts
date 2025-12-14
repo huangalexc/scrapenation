@@ -386,19 +386,25 @@ export class DomainScraperService {
       // If decoding fails, use original
     }
 
-    // Remove leading/trailing non-email characters and extract just the email
+    // Remove spaces that might be in the middle of the email first
+    // e.g., "naylorclinic@be llsouth.net" -> "naylorclinic@bellsouth.net"
+    cleaned = cleaned.replace(/\s+/g, '');
+
+    // Extract ONLY the email part, ensuring:
+    // 1. Local part starts with a letter (not digit/symbol)
+    // 2. Domain ends with a known TLD (com, net, org, etc.)
     // This handles cases like:
-    // - "phone@example.com" -> should be  removed
     // - "704-568-2447admin@chirobryan.com" -> "admin@chirobryan.com"
     // - "info@example.comcall" -> "info@example.com"
-    const match = cleaned.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    // - "drguglielmo@gmail.comphone" -> "drguglielmo@gmail.com"
+    // - "filler@godaddy.combookingsmy" -> "filler@godaddy.com"
+    // - "naylorclinic@bellsouth.netnaylorstaff" -> "naylorclinic@bellsouth.net"
+    const match = cleaned.match(
+      /[A-Za-z][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+\.(?:com|net|org|edu|gov|mil|co|io|us|uk|ca|au|de|fr|it|es|nl|be|ch|at|se|no|dk|fi|pl|cz|ru|jp|cn|in|br|mx|ar|cl|pe|nz|za|info|biz|name|mobi|pro|aero|asia|cat|coop|jobs|museum|tel|travel|xxx)/
+    );
     if (!match) return email;
 
-    const extractedEmail = match[0];
-
-    // Remove spaces that might be in the middle of the email
-    // e.g., "naylorclinic@be llsouth.net" -> "naylorclinic@bellsouth.net"
-    return extractedEmail.replace(/\s+/g, '');
+    return match[0];
   }
 
   /**
