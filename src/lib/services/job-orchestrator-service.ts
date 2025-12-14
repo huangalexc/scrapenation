@@ -239,11 +239,13 @@ export class JobOrchestratorService {
         const minConfidence = config.minDomainConfidence || 70;
 
         // Get the current count of already-scraped businesses
+        // A business is "scraped" if it has ANY of: domainEmail, domainPhone, or scrapeError
         const alreadyScraped = await prisma.business.count({
           where: {
             jobBusinesses: { some: { jobId } },
             OR: [
               { domainEmail: { not: null } },
+              { domainPhone: { not: null } },
               { scrapeError: { not: null } },
             ],
           },
@@ -278,6 +280,7 @@ export class JobOrchestratorService {
                 jobBusinesses: { some: { jobId } },
                 OR: [
                   { domainEmail: { not: null } },
+                  { domainPhone: { not: null } },
                   { scrapeError: { not: null } },
                 ],
               },
@@ -294,6 +297,7 @@ export class JobOrchestratorService {
               jobBusinesses: { some: { jobId } },
               OR: [
                 { domainEmail: { not: null } },
+                { domainPhone: { not: null } },
                 { scrapeError: { not: null } },
               ],
             },
@@ -426,14 +430,17 @@ export class JobOrchestratorService {
 
   /**
    * Get domains that haven't been scraped yet
+   * A domain is considered "scraped" if it has ANY of: domainEmail, domainPhone, or scrapeError
    */
   private async getUnscrapedDomains(jobId: string, minConfidence: number): Promise<DomainToScrape[]> {
     const businesses = await prisma.business.findMany({
       where: {
         jobBusinesses: { some: { jobId } },
         serpDomainConfidence: { gte: minConfidence },
-        domainEmail: null, // Not scraped yet
-        scrapeError: null, // Not failed
+        // Domain is NOT scraped if ALL three fields are null
+        domainEmail: null,
+        domainPhone: null,
+        scrapeError: null,
       },
       select: {
         placeId: true,

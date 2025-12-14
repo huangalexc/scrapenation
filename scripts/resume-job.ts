@@ -75,7 +75,11 @@ async function main() {
   const scrapedCount = await prisma.business.count({
     where: {
       jobBusinesses: { some: { jobId } },
-      OR: [{ domainEmail: { not: null } }, { scrapeError: { not: null } }],
+      OR: [
+        { domainEmail: { not: null } },
+        { domainPhone: { not: null } },
+        { scrapeError: { not: null } },
+      ],
     },
   });
   console.log(`  Actually scraped in DB: ${scrapedCount}`);
@@ -85,6 +89,7 @@ async function main() {
       jobBusinesses: { some: { jobId } },
       serpDomainConfidence: { gte: 70 },
       domainEmail: null,
+      domainPhone: null,
       scrapeError: null,
     },
   });
