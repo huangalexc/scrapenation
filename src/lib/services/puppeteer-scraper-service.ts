@@ -206,12 +206,37 @@ export class PuppeteerScraperService {
         }
 
         if (isProduction) {
-          // Production: Use Lambda-compatible Chromium
+          // Production: Use Lambda-compatible Chromium with aggressive resource limits
+          const minimalArgs = [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--single-process', // Most important - run Chrome in single process mode
+            '--no-zygote', // Don't use zygote process (reduces process count)
+            '--disable-software-rasterizer',
+            '--disable-extensions',
+            '--disable-background-networking',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-breakpad',
+            '--disable-component-extensions-with-background-pages',
+            '--disable-features=TranslateUI,BlinkGenPropertyTrees',
+            '--disable-ipc-flooding-protection',
+            '--disable-renderer-backgrounding',
+            '--metrics-recording-only',
+            '--mute-audio',
+            '--no-first-run',
+            '--disable-hang-monitor', // Don't spawn hang monitor thread
+            '--disable-prompt-on-repost',
+            '--disable-sync',
+          ];
+
           return await puppeteer.launch({
-            args: [...chromium.args, '--single-process'], // Add single-process flag for Railway
+            args: minimalArgs,
             defaultViewport: {
-              width: 1920,
-              height: 1080,
+              width: 1280, // Smaller viewport
+              height: 720,
             },
             executablePath: await chromium.executablePath(),
             headless: true,

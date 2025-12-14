@@ -253,7 +253,7 @@ export class JobOrchestratorService {
             console.log(`[JobOrchestrator] Scraping batch ${Math.floor(i / SCRAPE_BATCH_SIZE) + 1} (${batch.length} domains)`);
 
             const scraped = await domainScraperService.scrapeDomains(batch, {
-              concurrency: 3, // Reduced from 5 to 3 to prevent Puppeteer resource exhaustion
+              concurrency: 1, // Only 1 browser at a time due to Railway resource limits
               batchSize: batch.length,
               // Don't update progress during scraping - only after saving to database
               // This prevents counter from getting ahead of actual saved results
