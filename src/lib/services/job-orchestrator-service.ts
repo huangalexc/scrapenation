@@ -1,4 +1,4 @@
-import { prisma } from '../prisma';
+import { prisma, withRetry } from '../prisma';
 import { zipCodeService } from './zipcode-service';
 import { placesService } from './places-service';
 import { serpEnrichmentService } from './serp-enrichment-service';
@@ -587,17 +587,22 @@ export class JobOrchestratorService {
     // Batch update businesses
     await Promise.all(
       enriched.map((business) =>
-        prisma.business.updateMany({
-          where: { placeId: business.id },
-          data: {
-            serpDomain: business.enrichment.domain,
-            serpDomainConfidence: business.enrichment.domainConfidence,
-            serpEmail: business.enrichment.email,
-            serpEmailConfidence: business.enrichment.emailConfidence,
-            serpPhone: business.enrichment.phone,
-            serpPhoneConfidence: business.enrichment.phoneConfidence,
+        withRetry(
+          async () => {
+            return await prisma.business.updateMany({
+              where: { placeId: business.id },
+              data: {
+                serpDomain: business.enrichment.domain,
+                serpDomainConfidence: business.enrichment.domainConfidence,
+                serpEmail: business.enrichment.email,
+                serpEmailConfidence: business.enrichment.emailConfidence,
+                serpPhone: business.enrichment.phone,
+                serpPhoneConfidence: business.enrichment.phoneConfidence,
+              },
+            });
           },
-        })
+          `Update enrichment for ${business.name}`
+        )
       )
     );
   }
@@ -610,14 +615,19 @@ export class JobOrchestratorService {
 
     const updateResults = await Promise.all(
       scraped.map(async (domain) => {
-        const result = await prisma.business.updateMany({
-          where: { placeId: domain.id },
-          data: {
-            domainEmail: domain.result.email,
-            domainPhone: domain.result.phone,
-            scrapeError: domain.result.error,
+        const result = await withRetry(
+          async () => {
+            return await prisma.business.updateMany({
+              where: { placeId: domain.id },
+              data: {
+                domainEmail: domain.result.email,
+                domainPhone: domain.result.phone,
+                scrapeError: domain.result.error,
+              },
+            });
           },
-        });
+          `Update business ${domain.businessName}`
+        );
 
         // Log if update didn't match any records
         if (result.count === 0) {
@@ -653,13 +663,18 @@ export class JobOrchestratorService {
       scrapingTime?: number;
     }
   ): Promise<void> {
-    await prisma.job.update({
-      where: { id: jobId },
-      data: {
-        ...updates,
-        lastProgressAt: new Date(), // Update stall detection timestamp
+    await withRetry(
+      async () => {
+        return await prisma.job.update({
+          where: { id: jobId },
+          data: {
+            ...updates,
+            lastProgressAt: new Date(), // Update stall detection timestamp
+          },
+        });
       },
-    });
+      `Update job progress for ${jobId}`
+    );
   }
 
   /**

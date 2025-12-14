@@ -47,3 +47,58 @@ export const prisma =
   })();
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+
+/**
+ * Retry database operation with exponential backoff
+ * Handles connection errors that can occur during long-running jobs
+ */
+export async function withRetry<T>(
+  operation: () => Promise<T>,
+  operationName: string,
+  maxRetries: number = 3,
+  baseDelayMs: number = 1000
+): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      lastError = error;
+
+      // Check if it's a connection error
+      const isConnectionError =
+        error.code === 'P1001' || // Can't reach database server
+        error.code === 'P1002' || // Database server timeout
+        error.code === 'P1008' || // Operations timed out
+        error.code === 'P1017' || // Server has closed the connection
+        error.message?.includes('Connection') ||
+        error.message?.includes('ECONNREFUSED') ||
+        error.message?.includes('ETIMEDOUT');
+
+      if (!isConnectionError || attempt === maxRetries) {
+        // Not a connection error or out of retries
+        throw error;
+      }
+
+      // Calculate exponential backoff delay
+      const delayMs = baseDelayMs * Math.pow(2, attempt);
+      console.warn(
+        `[Prisma] ${operationName} failed (attempt ${attempt + 1}/${maxRetries + 1}): ${error.message}`
+      );
+      console.warn(`[Prisma] Retrying in ${delayMs}ms...`);
+
+      // Wait before retrying
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+      // Try to reconnect by disconnecting and letting Prisma reconnect on next query
+      try {
+        await prisma.$disconnect();
+      } catch (disconnectError) {
+        // Ignore disconnect errors
+      }
+    }
+  }
+
+  throw lastError;
+}
