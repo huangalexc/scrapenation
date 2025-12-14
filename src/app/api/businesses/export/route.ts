@@ -85,35 +85,25 @@ export async function GET(request: NextRequest) {
 }
 
 function generateCSV(businesses: any[]): string {
-  // CSV headers
+  // CSV headers - simplified to show combined email/phone columns
   const headers = [
     'Name',
     'City',
     'State',
     'Rating',
-    'SERP Domain',
-    'SERP Email',
-    'SERP Email Confidence',
-    'SERP Phone',
-    'SERP Phone Confidence',
-    'Domain Email',
-    'Domain Phone',
+    'Email',
+    'Phone',
     'Formatted Address',
   ];
 
-  // CSV rows
+  // CSV rows - use coalesce logic (domain first, fallback to SERP)
   const rows = businesses.map((b) => [
     escapeCsvField(b.name),
     escapeCsvField(b.city || ''),
     escapeCsvField(b.state || ''),
     b.rating || '',
-    escapeCsvField(b.serpDomain || ''),
-    escapeCsvField(b.serpEmail || ''),
-    b.serpEmailConfidence || '',
-    escapeCsvField(b.serpPhone || ''),
-    b.serpPhoneConfidence || '',
-    escapeCsvField(b.domainEmail || ''),
-    escapeCsvField(b.domainPhone || ''),
+    escapeCsvField(b.domainEmail || b.serpEmail || ''),
+    escapeCsvField(b.domainPhone || b.serpPhone || ''),
     escapeCsvField(b.formattedAddress || ''),
   ]);
 
