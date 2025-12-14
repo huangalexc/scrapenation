@@ -25,11 +25,6 @@ export const businessFilterSchema = z.object({
   pageSize: z.number().min(1).max(100).optional().default(20),
   state: z.string().optional(),
   businessType: z.string().optional(),
-  minRating: z.number().min(0).max(5).optional(),
-  maxRating: z.number().min(0).max(5).optional(),
-  minDomainConfidence: z.number().min(0).max(100).optional(),
-  minEmailConfidence: z.number().min(0).max(100).optional(),
-  minPhoneConfidence: z.number().min(0).max(100).optional(),
   hasEmail: z.boolean().optional(),
   hasPhone: z.boolean().optional(),
   sortBy: z

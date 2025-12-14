@@ -24,14 +24,6 @@ export async function GET(request: NextRequest) {
 
     if (searchParams.get('state')) params.state = searchParams.get('state');
     if (searchParams.get('businessType')) params.businessType = searchParams.get('businessType');
-    if (searchParams.get('minRating')) params.minRating = parseFloat(searchParams.get('minRating')!);
-    if (searchParams.get('maxRating')) params.maxRating = parseFloat(searchParams.get('maxRating')!);
-    if (searchParams.get('minDomainConfidence'))
-      params.minDomainConfidence = parseFloat(searchParams.get('minDomainConfidence')!);
-    if (searchParams.get('minEmailConfidence'))
-      params.minEmailConfidence = parseFloat(searchParams.get('minEmailConfidence')!);
-    if (searchParams.get('minPhoneConfidence'))
-      params.minPhoneConfidence = parseFloat(searchParams.get('minPhoneConfidence')!);
     if (searchParams.get('hasEmail')) params.hasEmail = searchParams.get('hasEmail') === 'true';
     if (searchParams.get('hasPhone')) params.hasPhone = searchParams.get('hasPhone') === 'true';
     if (searchParams.get('sortBy')) params.sortBy = searchParams.get('sortBy');
@@ -57,26 +49,6 @@ export async function GET(request: NextRequest) {
         contains: filters.businessType,
         mode: 'insensitive',
       };
-    }
-
-    if (filters.minRating !== undefined) {
-      where.rating = { ...where.rating, gte: filters.minRating };
-    }
-
-    if (filters.maxRating !== undefined) {
-      where.rating = { ...where.rating, lte: filters.maxRating };
-    }
-
-    if (filters.minDomainConfidence !== undefined) {
-      where.serpDomainConfidence = { gte: filters.minDomainConfidence };
-    }
-
-    if (filters.minEmailConfidence !== undefined) {
-      where.serpEmailConfidence = { gte: filters.minEmailConfidence };
-    }
-
-    if (filters.minPhoneConfidence !== undefined) {
-      where.serpPhoneConfidence = { gte: filters.minPhoneConfidence };
     }
 
     if (filters.hasEmail) {

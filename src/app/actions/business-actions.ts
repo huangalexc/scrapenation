@@ -57,26 +57,6 @@ export async function getBusinesses(input: unknown): Promise<ActionResult<Busine
       };
     }
 
-    if (filters.minRating !== undefined) {
-      where.rating = { ...where.rating, gte: filters.minRating };
-    }
-
-    if (filters.maxRating !== undefined) {
-      where.rating = { ...where.rating, lte: filters.maxRating };
-    }
-
-    if (filters.minDomainConfidence !== undefined) {
-      where.serpDomainConfidence = { gte: filters.minDomainConfidence };
-    }
-
-    if (filters.minEmailConfidence !== undefined) {
-      where.serpEmailConfidence = { gte: filters.minEmailConfidence };
-    }
-
-    if (filters.minPhoneConfidence !== undefined) {
-      where.serpPhoneConfidence = { gte: filters.minPhoneConfidence };
-    }
-
     if (filters.hasEmail) {
       where.OR = [
         { serpEmail: { not: null } },

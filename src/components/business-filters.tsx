@@ -3,7 +3,6 @@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { X, Download } from 'lucide-react';
@@ -63,62 +62,6 @@ export function BusinessFilters({ availableStates, onExport }: BusinessFiltersPr
           />
         </div>
 
-        {/* Rating Filter */}
-        <div>
-          <label className="text-sm font-medium mb-2 block">
-            Min Rating: {filters.minRating ? filters.minRating.toFixed(1) : 'Any'}
-          </label>
-          <Slider
-            value={[filters.minRating || 0]}
-            onValueChange={([v]) => setFilter('minRating', v > 0 ? v : undefined)}
-            max={5}
-            step={0.5}
-            className="w-full"
-          />
-        </div>
-
-        {/* Domain Confidence */}
-        <div>
-          <label className="text-sm font-medium mb-2 block">
-            Min Domain Confidence: {filters.minDomainConfidence || 0}%
-          </label>
-          <Slider
-            value={[filters.minDomainConfidence || 0]}
-            onValueChange={([v]) => setFilter('minDomainConfidence', v > 0 ? v : undefined)}
-            max={100}
-            step={5}
-            className="w-full"
-          />
-        </div>
-
-        {/* Email Confidence */}
-        <div>
-          <label className="text-sm font-medium mb-2 block">
-            Min Email Confidence: {filters.minEmailConfidence || 0}%
-          </label>
-          <Slider
-            value={[filters.minEmailConfidence || 0]}
-            onValueChange={([v]) => setFilter('minEmailConfidence', v > 0 ? v : undefined)}
-            max={100}
-            step={5}
-            className="w-full"
-          />
-        </div>
-
-        {/* Phone Confidence */}
-        <div>
-          <label className="text-sm font-medium mb-2 block">
-            Min Phone Confidence: {filters.minPhoneConfidence || 0}%
-          </label>
-          <Slider
-            value={[filters.minPhoneConfidence || 0]}
-            onValueChange={([v]) => setFilter('minPhoneConfidence', v > 0 ? v : undefined)}
-            max={100}
-            step={5}
-            className="w-full"
-          />
-        </div>
-
         {/* Has Email/Phone */}
         <div className="flex gap-4">
           <label className="flex items-center gap-2">
@@ -143,13 +86,22 @@ export function BusinessFilters({ availableStates, onExport }: BusinessFiltersPr
         </div>
 
         {/* Active Filters Count */}
-        {Object.values(filters).filter((v) => v !== undefined && v !== '' && v !== 1 && v !== 20 && v !== 'name' && v !== 'asc').length > 0 && (
-          <div>
-            <Badge variant="secondary">
-              {Object.values(filters).filter((v) => v !== undefined && v !== '' && v !== 1 && v !== 20 && v !== 'name' && v !== 'asc').length} active filters
-            </Badge>
-          </div>
-        )}
+        {(() => {
+          const activeFilterCount = [
+            filters.state,
+            filters.businessType,
+            filters.hasEmail,
+            filters.hasPhone,
+          ].filter((v) => v !== undefined && v !== '' && v !== false).length;
+
+          return activeFilterCount > 0 ? (
+            <div>
+              <Badge variant="secondary">
+                {activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'}
+              </Badge>
+            </div>
+          ) : null;
+        })()}
       </CardContent>
     </Card>
   );

@@ -5,11 +5,6 @@ export interface BusinessFilters {
   pageSize: number;
   state?: string;
   businessType?: string;
-  minRating?: number;
-  maxRating?: number;
-  minDomainConfidence?: number;
-  minEmailConfidence?: number;
-  minPhoneConfidence?: number;
   hasEmail?: boolean;
   hasPhone?: boolean;
   sortBy: 'name' | 'city' | 'state' | 'rating' | 'serpDomainConfidence';
