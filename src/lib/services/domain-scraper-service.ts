@@ -572,44 +572,55 @@ export class DomainScraperService {
 
     console.log(`[DomainScraperService] Starting scraping of ${domains.length} domains`);
     console.log(`[DomainScraperService] Concurrency: ${concurrency}, Batch size: ${batchSize}`);
+    if (usePuppeteerFallback) {
+      console.log(`[DomainScraperService] Puppeteer fallback enabled - will use shared browser instance for all domains`);
+    }
 
-    const results = await processBatch(
-      domains,
-      async (domain) => {
-        const result = await this.scrapeDomain(domain.domain, { timeout, usePuppeteerFallback });
-        return {
-          ...domain,
-          result,
-        };
-      },
-      {
-        concurrency,
-        batchSize,
-        onProgress: onProgress
-          ? (completed, total) => {
-              onProgress(completed, total);
-              if (completed % 25 === 0 || completed === total) {
-                console.log(
-                  `[DomainScraperService] Progress: ${completed}/${total} domains scraped`
-                );
-              }
-            }
-          : undefined,
-        onError: (error, domain) => {
-          logError(error, {
-            domain: domain.domain,
-            businessName: domain.businessName,
-          });
-          if (onError) {
-            onError(error, domain);
-          }
+    try {
+      const results = await processBatch(
+        domains,
+        async (domain) => {
+          const result = await this.scrapeDomain(domain.domain, { timeout, usePuppeteerFallback });
+          return {
+            ...domain,
+            result,
+          };
         },
+        {
+          concurrency,
+          batchSize,
+          onProgress: onProgress
+            ? (completed, total) => {
+                onProgress(completed, total);
+                if (completed % 25 === 0 || completed === total) {
+                  console.log(
+                    `[DomainScraperService] Progress: ${completed}/${total} domains scraped`
+                  );
+                }
+              }
+            : undefined,
+          onError: (error, domain) => {
+            logError(error, {
+              domain: domain.domain,
+              businessName: domain.businessName,
+            });
+            if (onError) {
+              onError(error, domain);
+            }
+          },
+        }
+      );
+
+      console.log(`[DomainScraperService] Completed scraping of ${results.length} domains`);
+
+      return results;
+    } finally {
+      // Always close shared browser after batch completes
+      if (usePuppeteerFallback) {
+        console.log(`[DomainScraperService] Closing shared Puppeteer browser after batch...`);
+        await puppeteerScraperService.closeSharedBrowser();
       }
-    );
-
-    console.log(`[DomainScraperService] Completed scraping of ${results.length} domains`);
-
-    return results;
+    }
   }
 
   /**

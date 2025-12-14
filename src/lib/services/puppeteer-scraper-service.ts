@@ -37,6 +37,36 @@ export class PuppeteerScraperService {
   private failedDomains = new Set<string>();
 
   /**
+   * Shared browser instance for batch processing (reuse instead of launching per domain)
+   */
+  private sharedBrowser: any = null;
+
+  /**
+   * Get or create a shared browser instance
+   */
+  private async getSharedBrowser() {
+    if (!this.sharedBrowser) {
+      console.log(`[PuppeteerScraper] Launching shared browser instance...`);
+      this.sharedBrowser = await this.launchBrowserWithRetry();
+      if (!this.sharedBrowser) {
+        throw new Error('Failed to launch shared browser after retries');
+      }
+    }
+    return this.sharedBrowser;
+  }
+
+  /**
+   * Close the shared browser instance
+   */
+  async closeSharedBrowser() {
+    if (this.sharedBrowser) {
+      console.log(`[PuppeteerScraper] Closing shared browser instance...`);
+      await this.sharedBrowser.close().catch(() => {});
+      this.sharedBrowser = null;
+    }
+  }
+
+  /**
    * Scrape a domain using headless browser (for JavaScript-rendered content)
    */
   async scrapeDomain(
@@ -55,18 +85,14 @@ export class PuppeteerScraperService {
       };
     }
 
-    let browser;
     let hasFailed = false;
     let failureReason = 'PUPPETEER_ERROR';
 
     try {
-      console.log(`[PuppeteerScraper] Starting browser for ${domain} (${isProduction ? 'production' : 'development'} mode)`);
+      console.log(`[PuppeteerScraper] Scraping ${domain} (${isProduction ? 'production' : 'development'} mode)`);
 
-      // Launch browser with retry logic (handles ETXTBSY errors on Railway)
-      browser = await this.launchBrowserWithRetry();
-      if (!browser) {
-        throw new Error('Failed to launch browser after retries');
-      }
+      // Get shared browser instance (reuse instead of launching new one)
+      const browser = await this.getSharedBrowser();
 
       const page = await browser.newPage();
 
@@ -97,7 +123,7 @@ export class PuppeteerScraperService {
         // If we found something on first page, return it
         if (result.email || result.phone) {
           console.log(`[PuppeteerScraper] Found contact info on ${firstPath || 'home page'}`);
-          await browser.close();
+          await page.close(); // Close page but keep browser open
           return { ...result, error: null };
         }
       } catch (error) {
@@ -126,7 +152,7 @@ export class PuppeteerScraperService {
 
         // If it's a persistent error, don't try other paths
         if (hasFailed) {
-          await browser.close();
+          await page.close(); // Close page but keep browser open
           return {
             email: null,
             phone: null,
@@ -158,7 +184,7 @@ export class PuppeteerScraperService {
           // If we found something, return it
           if (result.email || result.phone) {
             console.log(`[PuppeteerScraper] Found contact info on ${path}`);
-            await browser.close();
+            await page.close(); // Close page but keep browser open
             return { ...result, error: null };
           }
         } catch (error) {
@@ -169,7 +195,7 @@ export class PuppeteerScraperService {
         }
       }
 
-      await browser.close();
+      await page.close(); // Close page but keep browser open
 
       // No contact info found on any page
       return {
@@ -178,10 +204,8 @@ export class PuppeteerScraperService {
         error: 'NO_CONTACT_INFO_FOUND',
       };
     } catch (error) {
-      if (browser) {
-        await browser.close().catch(() => {});
-      }
-
+      // Don't close browser on error - it's shared across domains
+      // Just log the error and continue
       logError(error as Error, { domain, service: 'PuppeteerScraper' });
 
       return {
