@@ -83,6 +83,15 @@ export class PuppeteerScraperService {
   }
 
   /**
+   * Clear the failed domains cache
+   * Useful for diagnostics or when retrying previously failed domains
+   */
+  clearFailedDomains() {
+    console.log(`[PuppeteerScraper] Clearing failed domains cache (${this.failedDomains.size} domains)`);
+    this.failedDomains.clear();
+  }
+
+  /**
    * Scrape a domain using headless browser (for JavaScript-rendered content)
    */
   async scrapeDomain(

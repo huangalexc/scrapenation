@@ -32,6 +32,10 @@ export async function GET(request: NextRequest) {
   };
 
   try {
+    // Clear Puppeteer's failed domains cache for fresh diagnostic
+    const { puppeteerScraperService } = await import('@/lib/services/puppeteer-scraper-service');
+    puppeteerScraperService.clearFailedDomains();
+
     // Step 1: Fetch raw HTML
     diagnostic.steps.push({
       step: 1,
