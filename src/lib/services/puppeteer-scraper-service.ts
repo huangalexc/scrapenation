@@ -289,7 +289,10 @@ export class PuppeteerScraperService {
 
           return await puppeteer.launch({
             args: chromium.args.concat(minimalArgs),
-            defaultViewport: chromium.defaultViewport,
+            defaultViewport: {
+              width: 1280,
+              height: 720,
+            },
             executablePath,
             headless: chromium.headless,
           });
