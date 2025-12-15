@@ -38,11 +38,14 @@ export async function GET(request: NextRequest) {
     let cheerioHtml = '';
     try {
       const response = await axios.get(`https://${domain}`, {
-        timeout: 10000,
+        timeout: 30000, // Increased to 30 seconds
         headers: {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
         },
+        maxRedirects: 5,
       });
       cheerioHtml = response.data;
       diagnostic.steps[0].status = 'success';
@@ -140,7 +143,7 @@ export async function GET(request: NextRequest) {
     });
 
     const cheerioResult = await domainScraperService.scrapeDomain(domain, {
-      timeout: 10000,
+      timeout: 30000, // Increased to 30 seconds
       usePuppeteerFallback: false,
     });
 
@@ -155,7 +158,7 @@ export async function GET(request: NextRequest) {
     });
 
     const puppeteerResult = await domainScraperService.scrapeDomain(domain, {
-      timeout: 10000,
+      timeout: 30000, // Increased to 30 seconds
       usePuppeteerFallback: true,
     });
 
