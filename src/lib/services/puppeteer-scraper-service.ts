@@ -294,7 +294,7 @@ export class PuppeteerScraperService {
               height: 720,
             },
             executablePath,
-            headless: chromium.headless,
+            headless: true,
           });
         } else {
           // Development: Use puppeteer-core with system Chrome
