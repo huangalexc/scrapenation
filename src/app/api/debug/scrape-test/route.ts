@@ -173,14 +173,22 @@ export async function GET(request: NextRequest) {
       status: 'running',
     });
 
-    const puppeteerResult = await domainScraperService.scrapeDomain(domain, {
-      timeout: 60000, // Increased to 60 seconds for slow sites
-      usePuppeteerFallback: true,
-    });
+    let puppeteerResult: any = { email: null, phone: null, error: 'NOT_ATTEMPTED' };
+    try {
+      puppeteerResult = await domainScraperService.scrapeDomain(domain, {
+        timeout: 60000, // Increased to 60 seconds for slow sites
+        usePuppeteerFallback: true,
+      });
 
-    const stepIndex = diagnostic.steps.length - 1;
-    diagnostic.steps[stepIndex].status = 'success';
-    diagnostic.steps[stepIndex].result = puppeteerResult;
+      const stepIndex = diagnostic.steps.length - 1;
+      diagnostic.steps[stepIndex].status = 'success';
+      diagnostic.steps[stepIndex].result = puppeteerResult;
+    } catch (puppeteerError: any) {
+      const stepIndex = diagnostic.steps.length - 1;
+      diagnostic.steps[stepIndex].status = 'failed';
+      diagnostic.steps[stepIndex].error = puppeteerError.message;
+      puppeteerResult = { email: null, phone: null, error: puppeteerError.message };
+    }
 
     // Summary
     diagnostic.summary = {
