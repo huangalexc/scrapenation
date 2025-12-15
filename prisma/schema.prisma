@@ -47,6 +47,15 @@ model Business {
   domainPhone        String? @map("domain_phone")
   scrapeError        String? @map("scrape_error") // Error code if scraping failed
 
+  // Email verification fields (for both SERP and domain emails)
+  serpEmailVerified       Boolean?  @default(false) @map("serp_email_verified")
+  serpEmailVerifyStatus   String?   @map("serp_email_verify_status") // "valid", "invalid", "risky", "unknown"
+  serpEmailVerifyDetails  Json?     @map("serp_email_verify_details") // Detailed verification results
+
+  domainEmailVerified     Boolean?  @default(false) @map("domain_email_verified")
+  domainEmailVerifyStatus String?   @map("domain_email_verify_status") // "valid", "invalid", "risky", "unknown"
+  domainEmailVerifyDetails Json?    @map("domain_email_verify_details") // Detailed verification results
+
   // Many-to-many relationships
   userBusinesses UserBusiness[] // Users who have access to this business
   jobBusinesses  JobBusiness[]  // Jobs that found this business
@@ -82,7 +91,7 @@ model Job {
   status JobStatus @default(PENDING)
 
   // Checkpoint tracking (for resume capability)
-  currentStep String @default("pending") @map("current_step") // "zips", "places", "enrichment", "scraping", "completed"
+  currentStep String @default("pending") @map("current_step") // "zips", "places", "enrichment", "scraping", "verification", "completed"
   lastProgressAt DateTime @default(now()) @map("last_progress_at") // Track stalls
 
   // Progress tracking
@@ -91,6 +100,7 @@ model Job {
   businessesFound     Int @default(0) @map("businesses_found")
   businessesEnriched  Int @default(0) @map("businesses_enriched")
   businessesScraped   Int @default(0) @map("businesses_scraped")
+  emailsVerified      Int @default(0) @map("emails_verified")
   errorsEncountered   Int @default(0) @map("errors_encountered")
 
   // Cost tracking
@@ -103,6 +113,7 @@ model Job {
   placesSearchTime    Int? @map("places_search_time")    // Time spent on Places Search
   enrichmentTime      Int? @map("enrichment_time")       // Time spent on SERP Enrichment
   scrapingTime        Int? @map("scraping_time")         // Time spent on Domain Scraping
+  verificationTime    Int? @map("verification_time")     // Time spent on Email Verification
 
   // Error logs
   errorLog String? @map("error_log") @db.Text

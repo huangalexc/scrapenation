@@ -3,11 +3,12 @@ import { zipCodeService } from './zipcode-service';
 import { placesService } from './places-service';
 import { serpEnrichmentService } from './serp-enrichment-service';
 import { domainScraperService } from './domain-scraper-service';
+import { scrapedEmailVerificationService } from './scraped-email-verification-service';
 import { tierLimitsService } from './tier-limits-service';
 import { logError } from '../utils/errors';
 import type { Job, JobStatus } from '@prisma/client';
 import type { BusinessToEnrich } from '../types/enrichment';
-import type { DomainToScrape } from '../types/scraping';
+import type { DomainToScrape, EmailToVerify } from '../types/scraping';
 
 export interface JobConfig {
   userId: string;
@@ -26,6 +27,7 @@ export interface JobProgress {
   businessesFound: number;
   businessesEnriched: number;
   businessesScraped: number;
+  emailsVerified: number;
   errorsEncountered: number;
   estimatedCost: number;
 }
@@ -232,7 +234,7 @@ export class JobOrchestratorService {
       }
 
       // STEP 4: Domain Scraping (resume from partial progress)
-      if (['pending', 'zips', 'places', 'enrichment', 'scraping'].includes(currentStep)) {
+      if (['pending', 'zips', 'places', 'enrichment', 'scraping', 'verification'].includes(currentStep) && currentStep !== 'verification') {
         console.log(`[JobOrchestrator] Step 4: Scraping domains`);
         await this.setCheckpoint(jobId, 'scraping');
 
@@ -309,6 +311,78 @@ export class JobOrchestratorService {
         console.log(`[JobOrchestrator] Scraping completed in ${scrapingTimeSeconds}s`);
       } else {
         console.log(`[JobOrchestrator] Step 4: Skipping domain scraping (already completed)`);
+      }
+
+      // STEP 5: Email Verification (resume from partial progress)
+      if (['pending', 'zips', 'places', 'enrichment', 'scraping', 'verification'].includes(currentStep)) {
+        console.log(`[JobOrchestrator] Step 5: Verifying emails`);
+        await this.setCheckpoint(jobId, 'verification');
+
+        // Get the current count of already-verified emails
+        const alreadyVerified = await prisma.business.count({
+          where: {
+            jobBusinesses: { some: { jobId } },
+            OR: [
+              { serpEmailVerified: true },
+              { domainEmailVerified: true },
+            ],
+          },
+        });
+
+        // Get emails that haven't been verified yet
+        const emailsToVerify = await this.getUnverifiedEmails(jobId);
+        console.log(`[JobOrchestrator] ${emailsToVerify.length} emails need verification (${alreadyVerified} already done)`);
+
+        const verificationStartTime = Date.now();
+        if (emailsToVerify.length > 0) {
+          // Process in batches and save incrementally
+          const VERIFY_BATCH_SIZE = 50; // Verify 50 emails at a time
+
+          for (let i = 0; i < emailsToVerify.length; i += VERIFY_BATCH_SIZE) {
+            const batch = emailsToVerify.slice(i, i + VERIFY_BATCH_SIZE);
+            console.log(`[JobOrchestrator] Verifying batch ${Math.floor(i / VERIFY_BATCH_SIZE) + 1} (${batch.length} emails)`);
+
+            const verificationResults = await scrapedEmailVerificationService.verifyEmails(batch, {
+              concurrency: 20, // 20 concurrent DNS lookups (safe with caching + pre-grouping)
+              batchSize: batch.length,
+            });
+
+            // Save verification results immediately after each batch
+            await this.updateBusinessesWithVerification(verificationResults);
+
+            // Query database to get ACTUAL count of verified emails
+            const currentVerified = await prisma.business.count({
+              where: {
+                jobBusinesses: { some: { jobId } },
+                OR: [
+                  { serpEmailVerified: true },
+                  { domainEmailVerified: true },
+                ],
+              },
+            });
+
+            // Update progress ONLY after successful database save
+            await this.updateJobProgress(jobId, { emailsVerified: currentVerified });
+            console.log(`[JobOrchestrator] Saved batch ${Math.floor(i / VERIFY_BATCH_SIZE) + 1} - Total verified: ${currentVerified}/${alreadyVerified + emailsToVerify.length}`);
+          }
+
+          // Get final count from database
+          const finalVerified = await prisma.business.count({
+            where: {
+              jobBusinesses: { some: { jobId } },
+              OR: [
+                { serpEmailVerified: true },
+                { domainEmailVerified: true },
+              ],
+            },
+          });
+          console.log(`[JobOrchestrator] Completed all verification - ${finalVerified} emails verified`);
+        }
+        const verificationTimeSeconds = Math.round((Date.now() - verificationStartTime) / 1000);
+        await this.updateJobProgress(jobId, { verificationTime: verificationTimeSeconds });
+        console.log(`[JobOrchestrator] Verification completed in ${verificationTimeSeconds}s`);
+      } else {
+        console.log(`[JobOrchestrator] Step 5: Skipping email verification (already completed)`);
       }
 
       // Calculate costs and mark complete
@@ -454,6 +528,61 @@ export class JobOrchestratorService {
       domain: b.serpDomain!,
       businessName: b.name,
     }));
+  }
+
+  /**
+   * Get emails that haven't been verified yet
+   * Returns both SERP emails and domain emails that need verification
+   */
+  private async getUnverifiedEmails(jobId: string): Promise<EmailToVerify[]> {
+    const businesses = await prisma.business.findMany({
+      where: {
+        jobBusinesses: { some: { jobId } },
+        OR: [
+          // SERP email exists but not verified
+          {
+            serpEmail: { not: null },
+            serpEmailVerified: { not: true },
+          },
+          // Domain email exists but not verified
+          {
+            domainEmail: { not: null },
+            domainEmailVerified: { not: true },
+          },
+        ],
+      },
+      select: {
+        placeId: true,
+        serpEmail: true,
+        serpEmailVerified: true,
+        domainEmail: true,
+        domainEmailVerified: true,
+      },
+    });
+
+    const emailsToVerify: EmailToVerify[] = [];
+
+    businesses.forEach((business) => {
+      // Add SERP email if it exists and isn't verified
+      if (business.serpEmail && !business.serpEmailVerified) {
+        emailsToVerify.push({
+          id: business.placeId,
+          email: business.serpEmail,
+          emailSource: 'serp',
+        });
+      }
+
+      // Add domain email if it exists and isn't verified
+      if (business.domainEmail && !business.domainEmailVerified) {
+        emailsToVerify.push({
+          id: business.placeId,
+          email: business.domainEmail,
+          emailSource: 'domain',
+        });
+      }
+    });
+
+    return emailsToVerify;
   }
 
   /**
@@ -650,6 +779,66 @@ export class JobOrchestratorService {
   }
 
   /**
+   * Update businesses with email verification results
+   */
+  private async updateBusinessesWithVerification(
+    verificationResults: Map<string, import('../types/scraping').EmailVerificationResult>
+  ): Promise<void> {
+    console.log(`[JobOrchestrator] Updating ${verificationResults.size} businesses with verification results`);
+
+    const updateResults = await Promise.all(
+      Array.from(verificationResults.entries()).map(async ([businessId, result]) => {
+        // Find the business to determine which email field to update
+        const business = await prisma.business.findUnique({
+          where: { placeId: businessId },
+          select: { serpEmail: true, domainEmail: true },
+        });
+
+        if (!business) {
+          console.warn(`[JobOrchestrator] No business found with placeId: ${businessId}`);
+          return { count: 0 };
+        }
+
+        // Determine which email field this verification is for
+        const isSerpEmail = business.serpEmail === result.email;
+        const isDomainEmail = business.domainEmail === result.email;
+
+        // Build update data based on which email was verified
+        const updateData: any = {};
+        if (isSerpEmail) {
+          updateData.serpEmailVerified = result.verified;
+          updateData.serpEmailVerifyStatus = result.status;
+          updateData.serpEmailVerifyDetails = result.details;
+        } else if (isDomainEmail) {
+          updateData.domainEmailVerified = result.verified;
+          updateData.domainEmailVerifyStatus = result.status;
+          updateData.domainEmailVerifyDetails = result.details;
+        } else {
+          console.warn(
+            `[JobOrchestrator] Email ${result.email} doesn't match serpEmail or domainEmail for business ${businessId}`
+          );
+          return { count: 0 };
+        }
+
+        const updateResult = await withRetry(
+          async () => {
+            return await prisma.business.updateMany({
+              where: { placeId: businessId },
+              data: updateData,
+            });
+          },
+          `Update email verification for business ${businessId}`
+        );
+
+        return updateResult;
+      })
+    );
+
+    const totalUpdated = updateResults.reduce((sum, r) => sum + r.count, 0);
+    console.log(`[JobOrchestrator] Updated ${totalUpdated} businesses with verification results`);
+  }
+
+  /**
    * Update job progress and lastProgressAt timestamp
    */
   private async updateJobProgress(
@@ -660,6 +849,7 @@ export class JobOrchestratorService {
       businessesFound?: number;
       businessesEnriched?: number;
       businessesScraped?: number;
+      emailsVerified?: number;
       errorsEncountered?: number;
       placesApiCalls?: number;
       customSearchCalls?: number;
@@ -668,6 +858,7 @@ export class JobOrchestratorService {
       placesSearchTime?: number;
       enrichmentTime?: number;
       scrapingTime?: number;
+      verificationTime?: number;
     }
   ): Promise<void> {
     await withRetry(
