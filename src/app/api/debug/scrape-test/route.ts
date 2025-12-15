@@ -3,6 +3,10 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { domainScraperService } from '@/lib/services/domain-scraper-service';
 
+// Increase max duration for this API route (Railway/Vercel allow up to 300s for Pro)
+export const maxDuration = 300; // 5 minutes
+export const dynamic = 'force-dynamic';
+
 /**
  * API endpoint for diagnosing email extraction issues
  * GET /api/debug/scrape-test?domain=example.com&expectedEmail=test@example.com
