@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
       diagnostic.steps[0].status = 'failed';
       diagnostic.steps[0].error = error.message;
       cheerioFailed = true;
+      console.log(`[DEBUG] Cheerio failed for ${domain}, continuing to Puppeteer...`);
       // Don't return yet - continue to test Puppeteer
     }
 
@@ -163,6 +164,7 @@ export async function GET(request: NextRequest) {
       diagnostic.steps[5].result = cheerioResult;
     } else {
       // Cheerio failed - skip to Puppeteer
+      console.log(`[DEBUG] Skipping Cheerio analysis for ${domain}`);
       diagnostic.steps.push({
         step: 2,
         name: 'Skipped Cheerio analysis (HTML fetch failed)',
@@ -171,6 +173,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 7: Run with Puppeteer fallback
+    console.log(`[DEBUG] About to test Puppeteer for ${domain}`);
     diagnostic.steps.push({
       step: cheerioFailed ? 3 : 7,
       name: 'Run scraper WITH Puppeteer fallback (may take 30-60 seconds)',
