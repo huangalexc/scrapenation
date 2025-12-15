@@ -34,7 +34,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@react-email/components": "^1.0.1",
     "@react-email/render": "^2.0.0",
-    "@sparticuz/chromium": "^143.0.0",
+    "@sparticuz/chromium": "138.0.2",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.1.2",
