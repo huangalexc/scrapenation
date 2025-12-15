@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     let cheerioFailed = false;
     try {
       const response = await axios.get(`https://${domain}`, {
-        timeout: 30000, // Increased to 30 seconds
+        timeout: 10000, // 10 seconds
         headers: {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -170,7 +170,7 @@ export async function GET(request: NextRequest) {
       });
 
       cheerioResult = await domainScraperService.scrapeDomain(domain, {
-        timeout: 30000, // Increased to 30 seconds
+        timeout: 10000, // 10 seconds
         usePuppeteerFallback: false,
       });
 
@@ -190,14 +190,14 @@ export async function GET(request: NextRequest) {
     console.log(`[DEBUG] About to test Puppeteer for ${domain}`);
     diagnostic.steps.push({
       step: cheerioFailed ? 3 : 7,
-      name: 'Run scraper WITH Puppeteer fallback (may take 30-60 seconds)',
+      name: 'Run scraper WITH Puppeteer fallback (may take 10-20 seconds)',
       status: 'running',
     });
 
     let puppeteerResult: any = { email: null, phone: null, error: 'NOT_ATTEMPTED' };
     try {
       puppeteerResult = await domainScraperService.scrapeDomain(domain, {
-        timeout: 60000, // Increased to 60 seconds for slow sites
+        timeout: 10000, // 10 seconds
         usePuppeteerFallback: true,
       });
 
