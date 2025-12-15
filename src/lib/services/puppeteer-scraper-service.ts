@@ -222,12 +222,14 @@ export class PuppeteerScraperService {
     } catch (error) {
       // Don't close browser on error - it's shared across domains
       // Just log the error and continue
+      const errorMessage = (error as Error).message;
+      console.log(`[PuppeteerScraper] Error for ${domain}: ${errorMessage}`);
       logError(error as Error, { domain, service: 'PuppeteerScraper' });
 
       return {
         email: null,
         phone: null,
-        error: 'PUPPETEER_ERROR',
+        error: errorMessage.substring(0, 100), // Return first 100 chars of error
       };
     }
   }
