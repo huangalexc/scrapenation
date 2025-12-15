@@ -274,21 +274,15 @@ export class PuppeteerScraperService {
             '--disable-sync',
           ];
 
-          // Get executable path with proper brotli configuration for serverless
-          const executablePath = await chromium.executablePath({
-            // @sparticuz/chromium needs to decompress binaries on first run
-            // In serverless, /tmp is the only writable directory
-            path: '/tmp',
-          });
+          // Get Chromium executable path for serverless
+          // @sparticuz/chromium handles decompression automatically in AWS Lambda/Vercel
+          const executablePath = await chromium.executablePath();
 
           return await puppeteer.launch({
-            args: minimalArgs,
-            defaultViewport: {
-              width: 1280, // Smaller viewport
-              height: 720,
-            },
+            args: chromium.args.concat(minimalArgs),
+            defaultViewport: chromium.defaultViewport,
             executablePath,
-            headless: true,
+            headless: chromium.headless,
           });
         } else {
           // Development: Use puppeteer-core with system Chrome
