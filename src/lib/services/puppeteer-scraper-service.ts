@@ -282,11 +282,11 @@ export class PuppeteerScraperService {
             headless: true,
           });
         } else {
-          // Development: Use local Chromium from puppeteer package
-          console.log(`[PuppeteerScraper] Using local Chromium in development mode`);
-          const puppeteerFull = await import('puppeteer');
-          return await puppeteerFull.default.launch({
+          // Development: Use puppeteer-core with system Chrome
+          console.log(`[PuppeteerScraper] Using puppeteer-core in development mode`);
+          return await puppeteer.launch({
             headless: true,
+            executablePath: process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
             defaultViewport: {
               width: 1920,
               height: 1080,
