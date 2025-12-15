@@ -171,7 +171,7 @@ export class DomainScraperService {
       if (usePuppeteerFallback && !bestResult.email) {
         console.log(`[DomainScraper] Cheerio found no email for ${domain}, trying Puppeteer...`);
         try {
-          const puppeteerResult = await puppeteerScraperService.scrapeDomain(domain, { timeout: 3000 });
+          const puppeteerResult = await puppeteerScraperService.scrapeDomain(domain, { timeout });
           if (puppeteerResult.email) {
             console.log(`[DomainScraper] ✅ Puppeteer found email for ${domain}: ${puppeteerResult.email}`);
             // Combine Puppeteer email with Cheerio phone if we have it
@@ -202,17 +202,17 @@ export class DomainScraperService {
       logError(error as Error, { domain });
 
       // Try Puppeteer fallback if enabled and error is not persistent
-      // Skip Puppeteer for timeouts and 403s - they'll fail the same way
+      // Only skip Puppeteer for DNS/403/500 errors - they'll fail the same way
+      // But DO try Puppeteer for timeouts since it might succeed with longer wait times
       const shouldSkipPuppeteer =
-        errorMessage === 'TIMEOUT' ||
         errorMessage === 'ACCESS_DENIED' ||
         errorMessage === 'DOMAIN_NOT_FOUND' ||
         errorMessage === 'SERVER_ERROR';
 
       if (usePuppeteerFallback && !shouldSkipPuppeteer) {
-        console.log(`[DomainScraper] Cheerio error for ${domain}, trying Puppeteer fallback...`);
+        console.log(`[DomainScraper] Cheerio error for ${domain} (${errorMessage}), trying Puppeteer fallback...`);
         try {
-          const puppeteerResult = await puppeteerScraperService.scrapeDomain(domain, { timeout: 3000 });
+          const puppeteerResult = await puppeteerScraperService.scrapeDomain(domain, { timeout });
           if (puppeteerResult.email || puppeteerResult.phone) {
             console.log(`[DomainScraper] Puppeteer recovered from Cheerio error for ${domain}`);
             return puppeteerResult;

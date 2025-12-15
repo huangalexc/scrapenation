@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
     });
 
     let cheerioHtml = '';
+    let cheerioFailed = false;
     try {
       const response = await axios.get(`https://${domain}`, {
         timeout: 30000, // Increased to 30 seconds
@@ -53,125 +54,142 @@ export async function GET(request: NextRequest) {
     } catch (error: any) {
       diagnostic.steps[0].status = 'failed';
       diagnostic.steps[0].error = error.message;
-      return NextResponse.json(diagnostic);
+      cheerioFailed = true;
+      // Don't return yet - continue to test Puppeteer
     }
 
-    // Step 2: Check for mailto links
-    diagnostic.steps.push({
-      step: 2,
-      name: 'Check for mailto: links',
-      status: 'running',
-    });
+    let mailtoLinks: string[] = [];
+    let textEmails: string[] = [];
+    let attributeEmails: string[] = [];
+    let allFoundEmails: string[] = [];
+    let cheerioResult: any = null;
 
-    const $ = cheerio.load(cheerioHtml);
-    $('script, style, noscript').remove();
+    // Only run Cheerio analysis if we successfully fetched HTML
+    if (!cheerioFailed) {
+      // Step 2: Check for mailto links
+      diagnostic.steps.push({
+        step: 2,
+        name: 'Check for mailto: links',
+        status: 'running',
+      });
 
-    const mailtoLinks: string[] = [];
-    $('a[href^="mailto:"]').each((_, elem) => {
-      const href = $(elem).attr('href');
-      if (href) {
-        const email = href.replace('mailto:', '').split('?')[0];
-        mailtoLinks.push(email);
-      }
-    });
+      const $ = cheerio.load(cheerioHtml);
+      $('script, style, noscript').remove();
 
-    diagnostic.steps[1].status = 'success';
-    diagnostic.steps[1].mailtoLinks = mailtoLinks;
-    diagnostic.steps[1].count = mailtoLinks.length;
+      $('a[href^="mailto:"]').each((_, elem) => {
+        const href = $(elem).attr('href');
+        if (href) {
+          const email = href.replace('mailto:', '').split('?')[0];
+          mailtoLinks.push(email);
+        }
+      });
 
-    // Step 3: Check visible text
-    diagnostic.steps.push({
-      step: 3,
-      name: 'Search visible text for email pattern',
-      status: 'running',
-    });
+      diagnostic.steps[1].status = 'success';
+      diagnostic.steps[1].mailtoLinks = mailtoLinks;
+      diagnostic.steps[1].count = mailtoLinks.length;
 
-    const text = $('body').text();
-    const EMAIL_REGEX =
-      /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![A-Za-z0-9._%+-])/gi;
-    const textEmails = text.match(EMAIL_REGEX) || [];
+      // Step 3: Check visible text
+      diagnostic.steps.push({
+        step: 3,
+        name: 'Search visible text for email pattern',
+        status: 'running',
+      });
 
-    diagnostic.steps[2].status = 'success';
-    diagnostic.steps[2].textEmails = textEmails.slice(0, 10);
-    diagnostic.steps[2].count = textEmails.length;
+      const text = $('body').text();
+      const EMAIL_REGEX =
+        /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![A-Za-z0-9._%+-])/gi;
+      textEmails = text.match(EMAIL_REGEX) || [];
 
-    // Step 4: Check all attributes
-    diagnostic.steps.push({
-      step: 4,
-      name: 'Search all HTML attributes',
-      status: 'running',
-    });
+      diagnostic.steps[2].status = 'success';
+      diagnostic.steps[2].textEmails = textEmails.slice(0, 10);
+      diagnostic.steps[2].count = textEmails.length;
 
-    const attributeEmails: string[] = [];
-    $('*').each((_, elem) => {
-      if ('attribs' in elem && elem.attribs) {
-        Object.values(elem.attribs).forEach((value) => {
-          if (typeof value === 'string') {
-            const matches = value.match(EMAIL_REGEX) || [];
-            attributeEmails.push(...matches);
-          }
-        });
-      }
-    });
+      // Step 4: Check all attributes
+      diagnostic.steps.push({
+        step: 4,
+        name: 'Search all HTML attributes',
+        status: 'running',
+      });
 
-    const uniqueAttrEmails = [...new Set(attributeEmails)];
-    diagnostic.steps[3].status = 'success';
-    diagnostic.steps[3].attributeEmails = uniqueAttrEmails.slice(0, 10);
-    diagnostic.steps[3].count = uniqueAttrEmails.length;
+      $('*').each((_, elem) => {
+        if ('attribs' in elem && elem.attribs) {
+          Object.values(elem.attribs).forEach((value) => {
+            if (typeof value === 'string') {
+              const matches = value.match(EMAIL_REGEX) || [];
+              attributeEmails.push(...matches);
+            }
+          });
+        }
+      });
 
-    // Step 5: Check if expected email is found
-    diagnostic.steps.push({
-      step: 5,
-      name: 'Check for expected email',
-      status: 'running',
-    });
+      const uniqueAttrEmails = [...new Set(attributeEmails)];
+      diagnostic.steps[3].status = 'success';
+      diagnostic.steps[3].attributeEmails = uniqueAttrEmails.slice(0, 10);
+      diagnostic.steps[3].count = uniqueAttrEmails.length;
 
-    const allFoundEmails = [...new Set([...mailtoLinks, ...textEmails, ...attributeEmails])];
-    const expectedFound = expectedEmail
-      ? allFoundEmails.some((email) => email.toLowerCase() === expectedEmail.toLowerCase())
-      : false;
+      // Step 5: Check if expected email is found
+      diagnostic.steps.push({
+        step: 5,
+        name: 'Check for expected email',
+        status: 'running',
+      });
 
-    diagnostic.steps[4].status = 'success';
-    diagnostic.steps[4].expectedFound = expectedFound;
-    diagnostic.steps[4].allFoundEmails = allFoundEmails.slice(0, 20);
+      allFoundEmails = [...new Set([...mailtoLinks, ...textEmails, ...attributeEmails])];
+      const expectedFound = expectedEmail
+        ? allFoundEmails.some((email) => email.toLowerCase() === expectedEmail.toLowerCase())
+        : false;
 
-    // Step 6: Run actual scraper (Cheerio only)
-    diagnostic.steps.push({
-      step: 6,
-      name: 'Run actual scraper (Cheerio only)',
-      status: 'running',
-    });
+      diagnostic.steps[4].status = 'success';
+      diagnostic.steps[4].expectedFound = expectedFound;
+      diagnostic.steps[4].allFoundEmails = allFoundEmails.slice(0, 20);
 
-    const cheerioResult = await domainScraperService.scrapeDomain(domain, {
-      timeout: 30000, // Increased to 30 seconds
-      usePuppeteerFallback: false,
-    });
+      // Step 6: Run actual scraper (Cheerio only)
+      diagnostic.steps.push({
+        step: 6,
+        name: 'Run actual scraper (Cheerio only)',
+        status: 'running',
+      });
 
-    diagnostic.steps[5].status = 'success';
-    diagnostic.steps[5].result = cheerioResult;
+      cheerioResult = await domainScraperService.scrapeDomain(domain, {
+        timeout: 30000, // Increased to 30 seconds
+        usePuppeteerFallback: false,
+      });
+
+      diagnostic.steps[5].status = 'success';
+      diagnostic.steps[5].result = cheerioResult;
+    } else {
+      // Cheerio failed - skip to Puppeteer
+      diagnostic.steps.push({
+        step: 2,
+        name: 'Skipped Cheerio analysis (HTML fetch failed)',
+        status: 'skipped',
+      });
+    }
 
     // Step 7: Run with Puppeteer fallback
     diagnostic.steps.push({
-      step: 7,
-      name: 'Run scraper WITH Puppeteer fallback',
+      step: cheerioFailed ? 3 : 7,
+      name: 'Run scraper WITH Puppeteer fallback (may take 30-60 seconds)',
       status: 'running',
     });
 
     const puppeteerResult = await domainScraperService.scrapeDomain(domain, {
-      timeout: 30000, // Increased to 30 seconds
+      timeout: 60000, // Increased to 60 seconds for slow sites
       usePuppeteerFallback: true,
     });
 
-    diagnostic.steps[6].status = 'success';
-    diagnostic.steps[6].result = puppeteerResult;
+    const stepIndex = diagnostic.steps.length - 1;
+    diagnostic.steps[stepIndex].status = 'success';
+    diagnostic.steps[stepIndex].result = puppeteerResult;
 
     // Summary
     diagnostic.summary = {
       domain,
       expectedEmail,
-      cheerioResult: cheerioResult.email || 'NOT FOUND',
+      cheerioFailed,
+      cheerioResult: cheerioResult?.email || 'NOT FOUND',
       puppeteerResult: puppeteerResult.email || 'NOT FOUND',
-      cheerioPhone: cheerioResult.phone || 'NOT FOUND',
+      cheerioPhone: cheerioResult?.phone || 'NOT FOUND',
       puppeteerPhone: puppeteerResult.phone || 'NOT FOUND',
       diagnosis: '',
     };
@@ -179,8 +197,12 @@ export async function GET(request: NextRequest) {
     if (expectedEmail) {
       if (puppeteerResult.email?.toLowerCase() === expectedEmail.toLowerCase()) {
         diagnostic.summary.diagnosis = 'SUCCESS - Puppeteer found expected email';
-      } else if (cheerioResult.email?.toLowerCase() === expectedEmail.toLowerCase()) {
+      } else if (!cheerioFailed && cheerioResult?.email?.toLowerCase() === expectedEmail.toLowerCase()) {
         diagnostic.summary.diagnosis = 'SUCCESS - Cheerio found expected email';
+      } else if (cheerioFailed && puppeteerResult.email) {
+        diagnostic.summary.diagnosis = 'PARTIAL SUCCESS - Cheerio failed (timeout/connection), but Puppeteer found an email';
+      } else if (cheerioFailed) {
+        diagnostic.summary.diagnosis = 'ISSUE - Cheerio failed (timeout/connection) and Puppeteer also could not find email';
       } else if (allFoundEmails.length > 0) {
         diagnostic.summary.diagnosis =
           'ISSUE - Email exists in HTML but was not selected by scraper';
